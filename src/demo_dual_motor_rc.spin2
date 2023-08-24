@@ -8,6 +8,8 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... Mar 2022
 ''   Updated.... 04 May 2022
+''                              move sbus to pin 55
+''                              add frsky s.port (pin 54) telemetry and send motor currents
 ''
 '' =================================================================================================
 
@@ -146,7 +148,7 @@ VAR
     long    bLastIgnoreJoyStks
     long    bLastShowDriveStates
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, currentL, currentR
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -239,6 +241,8 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
             debug("--> quit loop")
             quit
 
+        currentL, _, currentR, _ := wheels.getCurrent()
+        telemetry.setcurrent(currentL, currentR)
         waitms(250) ' wait 1/4 second, before next loop
         loopCt++
 
