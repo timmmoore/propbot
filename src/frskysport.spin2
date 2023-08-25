@@ -152,7 +152,7 @@ VAR
   long StkAddr[10000]
 
 OBJ
-  serial        : "isp_serial_singleton_tmm"
+  'serial        : "isp_serial_singleton_tmm"
 
 pub null()
 
@@ -229,7 +229,7 @@ pub setSendCommand(prim, applicationIdt, valuet)
 PRI SendCommand() : retv
 ' have command saved ready for poll?
   if retv := (s_commandPrim > 0)
-    serial.fstr0(string("sport SendCommand\r"))
+    'serial.fstr0(string("sport SendCommand\r"))
     SendData(s_commandPrim\0, s_applicationId, s_value)
 
 PRI runsport() | rx, byte buffer[10], valid, index, physicalId

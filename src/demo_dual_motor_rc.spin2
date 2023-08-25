@@ -9,7 +9,19 @@
 ''   Started.... Mar 2022
 ''   Updated.... 04 May 2022
 ''                              move sbus to pin 55
-''                              add frsky s.port (pin 54) telemetry and send motor currents
+''                              add frsky s.port (pin 54) telemetry
+''                                send motor current telemetry
+''                              add resistor divider and ADC
+''                                      22.2V input to 5V convertor
+''                                      |
+''                                      20K
+''                                      |_______
+''                                      |       |
+''                                      3K      |
+''                                      |       |
+''                                      gnd     48
+''                                send battery voltage telemetry
+''                              stop motors and shutdown if min battery reached
 ''
 '' =================================================================================================
 
@@ -34,12 +46,21 @@ CON { fixed io pins }
   SBUS_RX  = 55  { I }                                          ' RC receiver channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver telemetry
 
+  BATTERY_ANALOG                = 48                            ' battery via resistor divider, 20K + 3K
+  BATTERY_LOW                   = 0
+  BATTERY_HIGH                  = 31300                         ' 20K + 3K resistor divider, max voltage is 24V * 3000/23000 -> 3.13
+  BATTERY_DIVIDER               = 1304.167                      ' 31300/1304.167 -> 24.0, battery max is 4.2V per cell (total 22.2V)
+  BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
+  BATTERY_STOP                  = false                         ' shutdown if min battery reached
+
 OBJ { our Drive Subsystem }
 
+                                                    ' 1 cog, total -> 6 cogs
     user        : "isp_bldc_motor_userconfig"       ' driver configuration
-    wheels      : "isp_steering_2wheel"             ' the dual-drive BLDC motors
-    remoteCtl   : "isp_flysky_rx"                   ' the FlySky Transmitter
-    telemetry   : "frskysport"
+    wheels      : "isp_steering_2wheel"             ' the dual-drive BLDC motors, 1 cog per motor, 1 sense cog -> 3 cogs
+    remoteCtl   : "isp_flysky_rx"                   ' the FlySky Transmitter, 1 cog
+    battery     : "jm_ez_analog"                    ' A2D to read battery voltage
+    telemetry   : "frskysport"                      ' bidirectional serial port to RC receiver for telemetry, 1 cog
 
 VAR
     long    remoteCog, telemetryCog
@@ -78,6 +99,7 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
 
         debug("* Set up - remote control")
 
+        battery.start(BATTERY_ANALOG, BATTERY_LOW, BATTERY_HIGH)
         remoteCog := remoteCtl.start(SBUS_RX)
         telemetryCog := telemetry.start(SPORT_BI)
         statusOK := remoteCog <> 0 ? TRUE : FALSE
@@ -148,7 +170,7 @@ VAR
     long    bLastIgnoreJoyStks
     long    bLastShowDriveStates
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, currentL, currentR
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fcurrentL, fcurrentR, fvoltage, bMinBattery
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -173,19 +195,19 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
     loopCt := 0
     repeat
         'debug("* ", udec_long(loopCt))
-        bShowDebugStatus := FALSE 'loopCt < 2 ? TRUE : FALSE
+        bShowDebugStatus := FALSE or bMinBattery 'loopCt < 2 ? TRUE : FALSE
         'remoteCtl.showDebug(bShowDebugStatus)
 
         ' SwA Ignore JoySticks
         'debug("-- -- SW -- --")
-        bIgnoreJoySticks := remoteCtl.swIsOn(remoteCtl.CTL_SW_A)
-        bShowState := remoteCtl.swIsOff(remoteCtl.CTL_SW_B)
+        bIgnoreJoySticks := remoteCtl.swIsOn(remoteCtl.CTL_SW_A) or bMinBattery
+        bShowState := remoteCtl.swIsOff(remoteCtl.CTL_SW_B) or bMinBattery      ' show drive current if minbattery
         ' SwC done, end loop!
-        bDoneTesting := remoteCtl.swIsOff(remoteCtl.CTL_SW_C)
-        bShowDriveStates := remoteCtl.swIsMiddle(remoteCtl.CTL_SW_C)
+        bDoneTesting := remoteCtl.swIsOff(remoteCtl.CTL_SW_C) or bMinBattery    ' exit drive loop if minbattery
+        bShowDriveStates := remoteCtl.swIsMiddle(remoteCtl.CTL_SW_C) or bMinBattery
         ' SwD down = Emergency Cutoff
         remoteCtl.showDebug(bShowDebugStatus)
-        bEmerCutoff := remoteCtl.swIsOff(remoteCtl.CTL_SW_D)
+        bEmerCutoff := remoteCtl.swIsOff(remoteCtl.CTL_SW_D) or bMinBattery     ' emergency cutoff drive if minbattery
         remoteCtl.showDebug(FALSE)
 
         if bLastShowDriveStates <> bShowDriveStates
@@ -241,8 +263,13 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
             debug("--> quit loop")
             quit
 
-        currentL, _, currentR, _ := wheels.getCurrent()
-        telemetry.setcurrent(currentL, currentR)
+        telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
+        fcurrentL, _, fcurrentR, _ := wheels.getCurrent()                       ' motor current telemetry
+        telemetry.setcurrent(fcurrentL, fcurrentR)
+        if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)                 ' <. doesn't work
+            debug("--> Minimum Battery Voltage")
+            bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
+
         waitms(250) ' wait 1/4 second, before next loop
         loopCt++
 
