@@ -10,6 +10,7 @@
 ''   Updated.... 03 Jul 2021
 ''                              Allow other switches to be 3way
 ''                              Use lookup table for valid switches and 3way switches
+''                              Changed min/max table for calibrated tx16s transmitter
 ''
 '' =================================================================================================
 
@@ -52,10 +53,10 @@ dat
 
 ' NOTE: in following: 0th channel min/max is not used - these are defaults used when cal is not run
 '  if your FlySky reports diff values run call in your code and then adjust these values (unless you always want to run cal.)
-    ctlMinValue     word    0, 246, 248, 250, 254, 240
-                    word    240, 240, 240, 240, 240
-    ctlMaxValue     word    0, 1807, 1801, 1766, 1786, 1807
-                    word    1807, 1807, 1807, 1807, 1807
+    ctlMinValue     word    0, 172, 172, 172, 172, 172
+                    word    172, 172, 172, 172, 172
+    ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810
+                    word    1810, 1810, 1810, 1810, 1810
 
     bShowDebug      BYTE    FALSE
 
