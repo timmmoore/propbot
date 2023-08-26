@@ -198,7 +198,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
     loopCt := 0
     repeat
         'debug("* ", udec_long(loopCt))
-        bShowDebugStatus := TRUE or bMinBattery 'loopCt < 2 ? TRUE : FALSE
+        bShowDebugStatus := FALSE or bMinBattery 'loopCt < 2 ? TRUE : FALSE
         'remoteCtl.showDebug(bShowDebugStatus)
 
         ' SwA Ignore JoySticks
