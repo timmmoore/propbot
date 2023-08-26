@@ -14,12 +14,12 @@
 ''                              add resistor divider and ADC
 ''                                      22.2V input to 5V convertor
 ''                                      |
-''                                      20K
-''                                      |_______
-''                                      |       |
-''                                      3K      |
-''                                      |       |
-''                                      gnd     48
+''                                      20K (19K93, 0.35%)
+''                                      |______________
+''                                      |              |
+''                                      3K(3K003 0.1%) |
+''                                      |              |
+''                                      gnd            48
 ''                                send battery voltage telemetry
 ''                              stop motors and shutdown if min battery reached
 ''
@@ -27,7 +27,7 @@
 
 CON { timing }
 
-  CLK_FREQ = 270_000_000                                        ' system freq as a constant
+  CLK_FREQ = 200_000_000 '270_000_000                                        ' system freq as a constant
   _clkfreq = CLK_FREQ                                           ' set system clock
 
 CON { fixed io pins }
@@ -48,8 +48,8 @@ CON { fixed io pins }
 
   BATTERY_ANALOG                = 48                            ' battery via resistor divider, 20K + 3K
   BATTERY_LOW                   = 0
-  BATTERY_HIGH                  = 31300                         ' 20K + 3K resistor divider, max voltage is 24V * 3000/23000 -> 3.13
-  BATTERY_DIVIDER               = 1304.167                      ' 31300/1304.167 -> 24.0, battery max is 4.2V per cell (total 22.2V)
+  BATTERY_HIGH                  = 31427                         ' 19K93 + 3K003 resistor divider, max voltage is 24V * 3003/22933 -> 3.1427
+  BATTERY_DIVIDER               = 1223.4                        ' 31427/931.6 -> 24.0, battery max is 4.2V per cell (total 22.2V)
   BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
   BATTERY_STOP                  = false                         ' shutdown if min battery reached
 
@@ -109,7 +109,10 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
             debug("R/C Running...")
             remoteControlMotor()
         else
-            debug("EEEE: SBUS rcvr not started?!")
+            if statusOK == false
+              debug("EEEE: SBUS rcvr not started?!")
+            if status1OK == false
+              debug("EEEE: SPORT not started?!")
 
         telemetry.stop()
         ' turn off our SBUS drivers
@@ -259,16 +262,18 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 priorDirection := rcDirection
                 priorSpeed := rcSpeed
 
-        if bDoneTesting
-            debug("--> quit loop")
-            quit
-
         telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
         fcurrentL, _, fcurrentR, _ := wheels.getCurrent()                       ' motor current telemetry
         telemetry.setcurrent(fcurrentL, fcurrentR)
-        if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)                 ' <. doesn't work
-            debug("--> Minimum Battery Voltage")
+        'if fvoltage <. BATTERY_MINIMUM                                          ' <. doesn't work
+        if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)
+            debug("--> Minimum Battery Voltage ", fdec(fvoltage))
             bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
+        'debug("--> Battery Voltage ", fdec(fvoltage), fdec(BATTERY_MINIMUM))
+
+        if bDoneTesting
+            debug("--> quit loop")
+            quit
 
         waitms(250) ' wait 1/4 second, before next loop
         loopCt++
