@@ -135,6 +135,8 @@ CON
   MAXNOSENSORS           = 50
   MAXCELLS               = 6
 
+  STACK_SIZE_LONGS       = 10000                        ' Need to test how much we need!
+
 VAR
   long rxp
   long cognum, clkx
@@ -149,7 +151,7 @@ VAR
   long flow[2], temps[4]
   long voltage, current1, current2
   long batterycount, battery[MAXCELLS]
-  long StkAddr[10000]
+  long StkAddr[STACK_SIZE_LONGS]
 
 OBJ
   'serial        : "isp_serial_singleton_tmm"
@@ -318,9 +320,9 @@ pri fas_getData(applicationIdt, subindex) : valuet
     FSSP_DATAID_VFAS:
       valuet := round(voltage*.100.0)                                               ' in 0.01V
     FSSP_DATAID_CURRENT1:
-      valuet := round(current1*.100.0)                                              ' in 0.01A
+      valuet := round(current1*.10000.0)                                            ' in 0.01mA
     FSSP_DATAID_CURRENT2:
-      valuet := round(current2*.100.0)                                              ' in 0.01A
+      valuet := round(current2*.10000.0)                                            ' in 0.01mA
 
 pri actual(value) : valuet
 ' make 32bit signed value into 16bit unsigned and msb 1 if -ve
@@ -493,8 +495,8 @@ _sensors
 '              word      DATA_ID_ACC,     FSSP_DATAID_ROLL,        0,   1000     ' $5240, given in deg *10
 '              word      DATA_ID_ACC,     SENSOR_APPL_ID_PRESSURE, 0,   1000     ' $5113, hPa *100
               word      DATA_ID_FAS,     FSSP_DATAID_VFAS,        0,   1000     ' $0210, given in 0.01V *100
-              word      DATA_ID_FAS,     FSSP_DATAID_CURRENT1,    0,   1000     ' $0201, in 0.01A *100
-              word      DATA_ID_FAS,     FSSP_DATAID_CURRENT2,    0,   1000     ' $0202, in 0.01A *100
+              word      DATA_ID_FAS,     FSSP_DATAID_CURRENT1,    0,   1000     ' $0201, in 0.01mA *100
+              word      DATA_ID_FAS,     FSSP_DATAID_CURRENT2,    0,   1000     ' $0202, in 0.01mA *100
 '              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID1,        0,   1000     ' $5116, motor driver temps, 0,01C *100
 '              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID2,        0,   1000     ' $5117, motor driver temps, 0,01C *100
 '              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID3,        0,   1000     ' $5118, motor driver temps, 0,01C *100
