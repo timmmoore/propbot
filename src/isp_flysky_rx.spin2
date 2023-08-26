@@ -8,6 +8,8 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... 03 Jul 2021
 ''   Updated.... 03 Jul 2021
+''                              Allow other switches to be 3way
+''                              Use lookup table for valid switches and 3way switches
 ''
 '' =================================================================================================
 
@@ -39,7 +41,6 @@ OBJ
 
 '    main                                                       ' * master Spin cog
     sbus    : "jm_sbus_rx"                                      ' * s.bus serial input/decoding
-    'term    : "isp_serial_singleton_tmm"                       ' debug terminal output
 
 ' * uses cog when loaded
 
@@ -65,6 +66,8 @@ pub start(desiredRxPin) : cog
     '' Configure IO and objects for application
     bShowDebug := FALSE ' default
     cog := sbus.start(desiredRxPin, @Defaults)                                ' start s.bus rx
+    if cog == 0
+        debug("!!ERROR!!  failed to start SBUS Cog")
     waitms(250)
     showSbus()
 
@@ -84,6 +87,8 @@ PUB showDebug(bEnable)
             'term.fstr1(string("- showDebug(%d) - now ON\r\n"), bEnable)
             debug("- showDebug(", sdec_(bEnable), ") - now ON")
    bShowDebug := bEnable
+   'showSbus()
+   'debug("- Sbus frame count ", udec_(sbus.count()))
 
 PUB readChannel(chan) : retValue | validChan
     '' Return value of given FlySky Control
@@ -106,29 +111,42 @@ PUB swIsMiddle(swChan) : bMiddleState
     bMiddleState := readSwitch(swChan) == SST_MID
     'debug("- swIsMiddle() = ", sdec_Long_(bMiddleState))
 
-PUB readSwitch(swChan) : eSwState | validSwChan
+PUB readSwitch(swChan) : eSwState
     '' Read switch value and decode into switch state (2-pos sw) [if 3-pos divert to other routine]
-    validSwChan := CTL_SW_A #> swChan <# CTL_SW_D                                ' legal SBUS Rxcvr channel
-    if validSwChan == CTL_SW_C   ' if 3-way sw don't allow it
+    ifnot checkSwitch(swChan)                           ' legal SBUS Rxcvr channel
+      eSwState := SST_OFF
+      swChan := 0                                       ' for debug below
+    elseif check3Way(swChan)
         return readSw3Way(swChan)
     else
-        eSwState := readChannel(validSwChan) > 1023 ? SST_OFF : SST_ON
+        eSwState := readChannel(swChan) > 1023 ? SST_OFF : SST_ON
     if bShowDebug
         'term.fstr2(string("- readSwitch(%d) - %d\r\n"), validSwChan, eSwState)
-        debug("- readSwitch(", udec_(validSwChan), ") - ", udec(eSwState))
+        debug("- readSwitch(", udec_(swChan), ") - ", udec(eSwState))
 
-PUB readSw3Way(swChan) : eSwState | validSwChan, rawValue
+PRI checkSwitch(swChan) : validSwitch
+  validSwitch := lookdown(swChan: CTL_SW_A, CTL_SW_B, CTL_SW_C, CTL_SW_D) <> 0
+  'debug("- checkswitch(", udec_(swChan), ") - ", udec(validswitch))
+
+PRI check3Way(swChan) : valid3Way
+  valid3Way := lookdown(swChan: CTL_SW_A, CTL_SW_B, CTL_SW_C, CTL_SW_D) <> 0
+  'debug("- checkswitch(", udec_(swChan), ") - ", udec(valid3Way))
+
+PUB readSw3Way(swChan) : eSwState | rawValue
     '' Read 3-pos switch value and decode into switch state
-    validSwChan := CTL_SW_C #> swChan <# CTL_SW_C                                ' legal SBUS Rxcvr channel
-    rawValue := readChannel(validSwChan)
-    'debug("- readSw3Way() = ", udec_(rawValue))
-    if rawValue < 684   ' bottom 3rd of 0-2047
-        eSwState := SST_ON
+    ifnot check3Way(swChan)
+      eSwState := SST_OFF
+      swChan := 0                                       ' for debug below
     else
-        eSwState := rawValue < 1367 ? SST_MID : SST_OFF ' bottom 2/3 rds or top 3rd?
+        rawValue := readChannel(swChan)
+        'debug("- readSw3Way() = ", udec_(rawValue))
+        if rawValue < 684   ' bottom 3rd of 0-2047
+            eSwState := SST_ON
+        else
+            eSwState := rawValue < 1367 ? SST_MID : SST_OFF ' bottom 2/3 rds or top 3rd?
     if bShowDebug
         'term.fstr2(string("- readSw3Way(%d) - %d\r\n"), validSwChan, eSwState)
-        debug("- readSw3Way(", udec_(validSwChan), ") - ", udec(eSwState))
+        debug("- readSw3Way(", udec_(swChan), ") - ", udec(eSwState))
 
 
 PUB showSbus() | ch, pos, x, y
