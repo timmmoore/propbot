@@ -75,7 +75,7 @@ CON
   FSSP_DATAID_RPM7       = $0507
   FSSP_DATAID_RPM8       = $0508
   FSSP_DATAID_FUEL       = $0600
-  FSSP_DATAID_ADC1       = $F102
+  FSSP_DATAID_ADC1       = $F102                        ' dont use it, some receivers use it
   FSSP_DATAID_ADC2       = $F103
   FSSP_DATAID_VARIO      = $0110                        ' height cm from baro sensor
   FSSP_DATAID_CELLS      = $0300                        ' voltage cells from frsky battery sensor
@@ -166,7 +166,7 @@ PUB start(pin) : retv | x
 
   setpinrx()                                                                    ' start smart pin rx for S.PORT
 
-  retv := cognum := COGSPIN(newcog, runsport(), @StkAddr)
+  retv := cognum := COGSPIN(newcog, runsport(), @StkAddr) + 1
 
 PUB stop()
   if (cognum)                                                                   ' if running
@@ -476,30 +476,31 @@ dat
 _sensorCountEntries  long      (@_sensorsend - @_sensors)/2                     ' count of info, not count of sensors
 _sensorCount  long      (@_sensorsend - @_sensors)/(2*_sensornoentries)         ' count of info, not count of sensors
 '                       physical id            sensor id     subindex  delay(ms)
-_sensors      word      DATA_ID_GPS,     FSSP_DATAID_LATLONG,     0,   1000     ' $0800, lat
-              word      DATA_ID_GPS,     FSSP_DATAID_LATLONG,     1,   1000     ' $0800, long
-              word      DATA_ID_GPS,     FSSP_DATAID_SPEED,       0,   1000     ' $0830
-              word      DATA_ID_GPS,     SENSOR_APPL_ID_GSATS,    0,   1000     ' $5111, no satellites
-              word      DATA_ID_GPS,     FSSP_DATAID_GPS_ALT,     0,   1000     ' $0820. altitude, cm
-              word      DATA_ID_FLOW,    FSSP_DATAID_FLOWX,       0,    500     ' $5114, optical flow x
-              word      DATA_ID_FLOW,    FSSP_DATAID_FLOWY,       0,    500     ' $5115, optical flow y
-              word      DATA_ID_ACTUALS, FSSP_ACTUAL1,            0,    500     ' $5100, swerve FL, speed/angle (deg *100)
-              word      DATA_ID_ACTUALS, FSSP_ACTUAL2,            0,    500     ' $5101, swerve FR
-              word      DATA_ID_ACTUALS, FSSP_ACTUAL3,            0,    500     ' $5102, swerve BL
-              word      DATA_ID_ACTUALS, FSSP_ACTUAL4,            0,    500     ' $5103, swerve BR
-              word      DATA_ID_ACC,     FSSP_DATAID_HEADING,     0,   1000     ' $0840, in deg *100
-              word      DATA_ID_ACC,     FSSP_DATAID_PITCH,       0,   1000     ' $5230, given in deg *10
-              word      DATA_ID_ACC,     FSSP_DATAID_ROLL,        0,   1000     ' $5240, given in deg *10
-              word      DATA_ID_ACC,     SENSOR_APPL_ID_PRESSURE, 0,   1000     ' $5113, hPa *100
+_sensors
+'              word      DATA_ID_GPS,     FSSP_DATAID_LATLONG,     0,   1000     ' $0800, lat
+'              word      DATA_ID_GPS,     FSSP_DATAID_LATLONG,     1,   1000     ' $0800, long
+'              word      DATA_ID_GPS,     FSSP_DATAID_SPEED,       0,   1000     ' $0830
+'              word      DATA_ID_GPS,     SENSOR_APPL_ID_GSATS,    0,   1000     ' $5111, no satellites
+'              word      DATA_ID_GPS,     FSSP_DATAID_GPS_ALT,     0,   1000     ' $0820. altitude, cm
+'              word      DATA_ID_FLOW,    FSSP_DATAID_FLOWX,       0,    500     ' $5114, optical flow x
+'              word      DATA_ID_FLOW,    FSSP_DATAID_FLOWY,       0,    500     ' $5115, optical flow y
+'              word      DATA_ID_ACTUALS, FSSP_ACTUAL1,            0,    500     ' $5100, swerve FL, speed/angle (deg *100)
+'              word      DATA_ID_ACTUALS, FSSP_ACTUAL2,            0,    500     ' $5101, swerve FR
+'              word      DATA_ID_ACTUALS, FSSP_ACTUAL3,            0,    500     ' $5102, swerve BL
+'              word      DATA_ID_ACTUALS, FSSP_ACTUAL4,            0,    500     ' $5103, swerve BR
+'              word      DATA_ID_ACC,     FSSP_DATAID_HEADING,     0,   1000     ' $0840, in deg *100
+'              word      DATA_ID_ACC,     FSSP_DATAID_PITCH,       0,   1000     ' $5230, given in deg *10
+'              word      DATA_ID_ACC,     FSSP_DATAID_ROLL,        0,   1000     ' $5240, given in deg *10
+'              word      DATA_ID_ACC,     SENSOR_APPL_ID_PRESSURE, 0,   1000     ' $5113, hPa *100
               word      DATA_ID_FAS,     FSSP_DATAID_VFAS,        0,   1000     ' $0210, given in 0.01V *100
               word      DATA_ID_FAS,     FSSP_DATAID_CURRENT1,    0,   1000     ' $0201, in 0.01A *100
               word      DATA_ID_FAS,     FSSP_DATAID_CURRENT2,    0,   1000     ' $0202, in 0.01A *100
-              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID1,        0,   1000     ' $5116, motor driver temps, 0,01C *100
-              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID2,        0,   1000     ' $5117, motor driver temps, 0,01C *100
-              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID3,        0,   1000     ' $5118, motor driver temps, 0,01C *100
-              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID4,        0,   1000     ' $5119, motor driver temps, 0,01C *100
-              word      DATA_ID_FLVSS,   FSSP_DATAID_CELLS,       0,   1000     ' $0300, battery cell 0, 1
-              word      DATA_ID_FLVSS,   FSSP_DATAID_CELLS,       1,   1000     ' $0300, battery cell 2
+'              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID1,        0,   1000     ' $5116, motor driver temps, 0,01C *100
+'              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID2,        0,   1000     ' $5117, motor driver temps, 0,01C *100
+'              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID3,        0,   1000     ' $5118, motor driver temps, 0,01C *100
+'              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID4,        0,   1000     ' $5119, motor driver temps, 0,01C *100
+'              word      DATA_ID_FLVSS,   FSSP_DATAID_CELLS,       0,   1000     ' $0300, battery cell 0, 1
+'              word      DATA_ID_FLVSS,   FSSP_DATAID_CELLS,       1,   1000     ' $0300, battery cell 2
 _sensorsend
 '
 con { license }
