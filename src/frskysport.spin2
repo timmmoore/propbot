@@ -264,7 +264,7 @@ PRI runsport() | rx, byte buffer[10], valid, index, physicalId
 
 pri validid(physicalId) : sensorid
 ' is it one of our physical sensors?
-  sensorid := lookdown(physicalId: DATA_ID_FAS, DATA_ID_GPS, DATA_ID_ACTUALS, DATA_ID_ACC, DATA_ID_FLOW, DATA_ID_TEMP) ', DATA_ID_FLVSS, DATA_ID_VARIO)
+  sensorid := lookdown(physicalId: DATA_ID_FAS) ', DATA_ID_GPS, DATA_ID_ACTUALS, DATA_ID_ACC, DATA_ID_FLOW, DATA_ID_TEMP) ', DATA_ID_FLVSS, DATA_ID_VARIO)
 
 pri rxcheck() : rxbyte | o1
 '' Check for serial input
