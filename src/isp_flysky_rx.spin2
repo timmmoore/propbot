@@ -8,6 +8,7 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... 03 Jul 2021
 ''   Updated.... 03 Jul 2021
+''   Updated.... 26 Aug 2023 (timmoore)
 ''                              Allow other switches to be 3way
 ''                              Use lookup table for valid switches and 3way switches
 ''                              Changed min/max table for calibrated tx16s transmitter
