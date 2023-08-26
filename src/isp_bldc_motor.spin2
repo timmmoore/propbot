@@ -8,6 +8,8 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... Feb 2022
 ''   Updated.... 21 Jul 2022
+''   Updated.... 26 Aug 2023 (timmoore)
+''                              comment out Optical Rotary Encoder 360P/R on pin 48/49 - timmoore
 ''
 '' =================================================================================================
 
@@ -77,7 +79,7 @@ CON { test pins for LA measurement }
     TEST_PIN_LP_TOGL = TEST_BASE_PIN + 4           ' LA ch4
     TEST_PIN_UNKNOWN = TEST_BASE_PIN + 5           ' LA ch4
 '}
-'{
+{
 
     ' PIN 48, 49 our rot/360 R/P Sensor
     '   (Optical Rotary Encoder 360P/R)
@@ -903,8 +905,8 @@ PRI offsetsForMotor(eMotorType) : fwdDegrees, revDegrees | ofsDegr
         }
 
         ' Chips values (orig driver)
-        ' CHIP ORIG: offset_fwd	long	280 frac 360			'280 frac 360 (Doug's motor) 20
-        ' CHIP ORIG: offset_rev	long	230 frac 360			'230 frac 360 (Doug's motor) 340
+        ' CHIP ORIG: offset_fwd long    280 frac 360                    '280 frac 360 (Doug's motor) 20
+        ' CHIP ORIG: offset_rev long    230 frac 360                    '230 frac 360 (Doug's motor) 340
 
         ' my values from characterization at 18v5:
         ofsDegr := 43
@@ -1306,7 +1308,7 @@ PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loop
     ' -----------------------------------
     ' Logic Analyzer Instrumentation Code
     ' -----------------------------------
-'{
+{
     'pinlow(TEST_PIN_SENSE_LP)
 
     ' configure our R/P sensor pins
@@ -1347,7 +1349,7 @@ PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loop
     '   (Optical Rotary Encoder 360P/R)
     ' https://www.amazon.com/Signswise-Incremental-Encoder-Dc5-24v-Voltage/dp/B00Y9KDDCY
     ' ------------------------------------------
-'{
+{
         ' accum our fast & slow windowed values
         if loopCtr +// SENSE_LOOP_HZ == 0             ' once every second compute slow cts in case we are slow
             ' ---------------------------------------------------------------------------------
