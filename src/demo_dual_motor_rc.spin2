@@ -8,6 +8,7 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... Mar 2022
 ''   Updated.... 04 May 2022
+''   Updated.... 26 Aug 2023 (timmoore)
 ''                              move sbus to pin 55
 ''                              add frsky s.port (pin 54) telemetry
 ''                                send motor current telemetry
@@ -51,7 +52,7 @@ CON { fixed io pins }
   BATTERY_HIGH                  = 31427                         ' 19K93 + 3K003 resistor divider, max voltage is 24V * 3003/22933 -> 3.1427
   BATTERY_DIVIDER               = 1223.4                        ' 31427/931.6 -> 24.0, battery max is 4.2V per cell (total 22.2V)
   BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
-  BATTERY_STOP                  = false                         ' shutdown if min battery reached
+  BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
 OBJ { our Drive Subsystem }
 
