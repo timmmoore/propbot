@@ -1,16 +1,18 @@
 Parallax Bundle	https://www.parallax.com/product/bldc-motor-control-with-p2-edge-super-bundle/
 Fuse block	https://www.amazon.com/dp/B083FRJGHV
 Battery		https://www.amazon.com/dp/B06XP7TY3S
-5V PSU		https://www.amazon.com/dp/B09DGDJHYM
+5V convertor	https://www.amazon.com/dp/B09DGDJHYM
 RC receiver	https://www.amazon.com/gp/product/B074QHJRBC
 Switch		https://www.amazon.com/gp/product/B0BFHZ9XYX
 Battery plug	https://www.amazon.com/gp/product/B08L3RS5HP
-heatset		https://www.amazon.com/dp/B07L96KVP3
-flat head bolts	https://www.amazon.com/gp/product/B073J4CRZV
-button head	https://www.amazon.com/gp/product/B09MYDQCXX
-1/4-20		https://www.amazon.com/Button-Socket-Screws-Allen-Threaded/dp/B084M22GL1
-standoffs	https://www.amazon.com/Jucoan-Standoffs-Assortment-Threaded-Motherboard/dp/B08DMSNB8X
-dupont		https://www.amazon.com/gp/product/B07BDJ63CP
+heatset		https://www.amazon.com/dp/B07L96KVP3		- M4: fuse holder, M3: eboard, eboard components, switch
+flat head	https://www.amazon.com/gp/product/B073J4CRZV	- mount eboard
+button head	https://www.amazon.com/gp/product/B09MYDQCXX	- mount components on eboard
+flat head	https://www.amazon.com/gp/product/B07NWL5HK3	- mount switch
+1/4-20 5/8	https://www.amazon.com/gp/product/B0BQ2Y7TQX	- mount casters
+1/4-20 7/8	https://www.amazon.com/gp/product/B0BQ2YDQ8Y	- mount motors
+standoffs	https://www.amazon.com/Jucoan-Standoffs-Assortment-Threaded-Motherboard/dp/B08DMSNB8X - edge board, motor boards
+dupont		https://www.amazon.com/gp/product/B07BDJ63CP	- extend motor sense cables
 
 
 3D printed chassis, eboard, hub holder and switch holder
