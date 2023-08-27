@@ -31,6 +31,9 @@ CON { timing }
   CLK_FREQ = 270_000_000                                        ' system freq as a constant
   _clkfreq = CLK_FREQ                                           ' set system clock
 
+CON {debug}
+  DEBUG_LOG_SIZE = 500_000
+
 CON { fixed io pins }
 
   RX1      = 63  { I }                                          ' programming / debug
