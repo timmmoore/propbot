@@ -281,7 +281,9 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     eUserDetectionMode, bUserForced := getInternalDetectMode(eDetectionMode)
 
     ' set the mode now used by the driver to condition things (current-sense scaling, etc.)
+    pinbase := eMotorBasePin        ' set pinbase so getBoardType works
     eDetectedBoard := getBoardType()
+    pinbase := VALUE_NOT_SET        ' reset pinbase until full checks are done
 
     rSenseForBoard := VALUE_NOT_SET
     if eDetectedBoard == REV_A
@@ -1315,7 +1317,7 @@ PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loop
     pinfloat(TEST_ALL2_PINS)    ' set to inputs
     ' configure for quadrature A+B X=run continuous, reset Y
     pinstart(TEST_PIN_RP_SNS1, P_QUADRATURE | P_PLUS1_B, 0, 0)
-'}
+}
 
     repeat
         loopCtr++
@@ -1339,7 +1341,7 @@ PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loop
     ' -----------------------------------
 {
         pinhigh(TEST_PIN_SENSE_LP)
-'}
+}
 
         hallCntsIn8thSec := absDistanceInTics(pos, prioro8thSecPos) ' Read the next sensor value
         prioro8thSecPos := pos                              ' save prior
@@ -1372,7 +1374,7 @@ PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loop
             tv360rpm := tv360rpm_x10 / 10
             '
             ' ---------------------------------------------------------------------------------
-'}
+}
 
         ' accum our windowed values
         hallWindowSum -= LONG[@hallCountsWindow][hallWinIndex]          ' Remove the oldest entry from the sum
