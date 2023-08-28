@@ -244,10 +244,10 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ' NOTES: 220413 -  at 14.8V 10_000 better on gravel surface  but too slow a ramp to 15_000 and PWR_14p8V to see if motors stay operational
     ' 50_000 for 12v & 18_5v
     ' dropped to 40K and 10K to stop motors faulting
-    ramp_fast   := 40_000                   ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zer
-    'ramp_fast   := 50_000                   ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zer
+    ramp_fast   := 40_000                   ' 40k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
+    'ramp_fast   := 50_000                   ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
     'ramp_slo    := 8_000                    ' 6.5 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
-    ramp_slo    := 10_000                    ' 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
+    ramp_slo    := 10_000                    ' 10k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
     'ramp_slo    := 12_000                    ' 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
 
     motorIsReversed := FALSE    ' by default our motor direction is not reversed
@@ -2303,9 +2303,9 @@ numerator       LONG    3300 << 11              ' numerator for ADC calculations
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
 maxPos          LONG    $7FFF_FFFF              ' max positive signed value
 ramp_thresh     LONG    25_000_000              ' fm zero - slow ramp to here then fast ramp ( ~1/5 of 0-max )
-ltMotrId        BYTE    "lt",0,0
-rtMotrId        BYTE    "rt",0,0
-motorRtPins     LONG    $1a8                    ' my test motor basepin field
+'ltMotrId        BYTE    "lt",0,0
+'rtMotrId        BYTE    "rt",0,0
+'motorRtPins     LONG    $1a8                    ' my test motor basepin field
 
 'twoPercent      LONG    FRAME / 10              ' 2% of frame/2
 'maxDrvU_        LONG    -1
