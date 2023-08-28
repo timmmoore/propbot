@@ -50,7 +50,7 @@ CON { fixed io pins }
   SBUS_RX  = 55  { I }                                          ' RC receiver channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver telemetry
 
-  BATTERY_ANALOG                = 48                            ' battery via resistor divider, 20K + 3K
+  BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 20K + 3K
   BATTERY_LOW                   = 0
   BATTERY_HIGH                  = 31427                         ' 19K93 + 3K003 resistor divider, max voltage is 24V * 3003/22933 -> 3.1427
   BATTERY_DIVIDER               = 1309.46 '1223.4               ' 31427/1309.46 -> 24.0, battery max is 4.2V per cell (total 22.2V)
@@ -121,6 +121,7 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
         telemetry.stop()
         ' turn off our SBUS drivers
         remoteCtl.stop()
+        battery.stop()
         ' turn off our motor drivers
         wheels.stop()
     else
@@ -128,6 +129,7 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
 
     debug("* DONE")
 
+{
 PRI waitUntilMotorReady()
     if wheels.isReady() == false
         debug("* wait motors ready...")
@@ -156,6 +158,7 @@ PRI waitUntilMotorDone()
             else
                 waitms(2)
     debug("* Motors stopped!")
+'}
 
 CON
 
@@ -177,7 +180,7 @@ VAR
     long    bLastIgnoreJoyStks
     long    bLastShowDriveStates
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,} bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -199,7 +202,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
     bLastEmerCutoff := VALUE_NOT_SET ' value can't happen
     bLastShowDriveStates := VALUE_NOT_SET ' value can't happen
 
-    loopCt := 0
+    'loopCt := 0
     repeat
         'debug("* ", udec_long(loopCt))
         bShowDebugStatus := FALSE or bMinBattery 'loopCt < 2 ? TRUE : FALSE
@@ -279,7 +282,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
             quit
 
         waitms(250) ' wait 1/4 second, before next loop
-        loopCt++
+        'loopCt++
 
     ' done, stop our motors
     wheels.stop()
