@@ -104,21 +104,8 @@ PUB null()
 
 PUB start(eMotorBasePin, eMotorVoltage, eDetectionMode) : ok | legalBase
 '' Specify motor control board connect location for this motor and start the driver
-        ' setup runtime constants
+    ' setup runtime constants
     init(eMotorBasePin, eMotorVoltage, eDetectionMode)
-
-    ' ensure we only use legal values
-    legalBase := eMotorBasePin
-    CASE eMotorBasePin
-        PINS_P0_P15 :
-        PINS_P16_P31 :
-        PINS_P32_P47 :
-        OTHER :
-            legalBase := INVALID_PIN_BASE
-
-    ' if legal base-pin then start cog
-    if legalBase <> INVALID_PIN_BASE
-        pinbase := legalBase        ' record base pin number
         params_ptr := @offset_fwd   ' point to driver variables
         setTargetAccel(0)           ' do NOT move at startup
 
@@ -147,18 +134,12 @@ PUB stop()
 PUB testSetup(eMotorBasePin, eMotorVoltage, eDetectionMode) | legalBase
 '' Specify motor control board connect location for this motor BUT DON'T start the driver
     init(eMotorBasePin, eMotorVoltage, eDetectionMode)
-    ' ensure we only use legal values
-    legalBase := eMotorBasePin
-    CASE eMotorBasePin
-        PINS_P0_P15 :
-        PINS_P16_P31 :
-        PINS_P32_P47 :
-        OTHER :
-            legalBase := INVALID_PIN_BASE
 
-    ' if legal base-pin then start cog
-    if legalBase <> INVALID_PIN_BASE
-        pinbase := legalBase        ' record base pin number
+PRI validatePinBase(eMotorBasePin) : legalBase
+
+  legalBase := VALUE_NOT_SET
+  if lookdown(eMotorBasePin: PINS_P0_P15, PINS_P16_P31, PINS_P32_P47) <> 0
+    legalBase := eMotorBasePin
 
 PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
 '' Specify motor control board connect location for this motor BUT DON'T start the driver
@@ -171,7 +152,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ' set up debug variables
     useDebug := FALSE
     showHDMIDebug := FALSE
-    pinbase := VALUE_NOT_SET        ' record base pin number
+    pinbase := validatePinBase(eMotorBasePin) 'VALUE_NOT_SET        ' record base pin number
 
     bResetSenseData := FALSE
 
@@ -284,9 +265,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     eUserDetectionMode, bUserForced := getInternalDetectMode(eDetectionMode)
 
     ' set the mode now used by the driver to condition things (current-sense scaling, etc.)
-    pinbase := eMotorBasePin        ' set pinbase so getBoardType works
     eDetectedBoard := getBoardType()
-    pinbase := VALUE_NOT_SET        ' reset pinbase until full checks are done
 
     rSenseForBoard := VALUE_NOT_SET
     if eDetectedBoard == REV_A
@@ -697,13 +676,8 @@ CON { --- PUBLIC Utility Methods --- }
 
 PUB validBasePinForChoice(userBasePin) : legalBasePin
 '' VALIDATE users' base-pin choice returns legalBasePin or INVALID_PIN_BASE
-    legalBasePin := userBasePin
-    CASE userBasePin
-        PINS_P0_P15 :
-        PINS_P16_P31 :
-        PINS_P32_P47 :
-        OTHER :
-            legalBasePin := INVALID_PIN_BASE
+    ' note VALUE_NOT_SET = INVALID_PIN_BASE = -1
+    legalBasePin := validatePinBase(userBasePin)
     debug("*VAL* ", sdec_long(legalBasePin))
 
 PUB validVoltageForChoice(userVoltage) : legalVoltage
@@ -1094,6 +1068,7 @@ PRI motorVoltage(eSelectedPower) : fVolts
             abort   ' SHOULD NEVER get here!
 
 CON ' --- HDMI Debug Support ---
+{
 
 CON { Constants for HDMI Debug }
 
@@ -1248,7 +1223,7 @@ PUB getDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVar
         debug("* MOTR Sent: ", udec(nGroups), uhex_long(pGroupTitles), uhex_long(pGroupNames), uhex_long(pGroupVarCts), uhex_long(pGroupVars))
         debug("* =============")
 
-
+'}
 CON ' -- TASK: position tracking --
 
 ' Sense Constants
