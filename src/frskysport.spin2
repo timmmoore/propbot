@@ -132,10 +132,10 @@ CON
   DATA_ID_TEMP_ID3       = $5118
   DATA_ID_TEMP_ID4       = $5119
 
-  MAXNOSENSORS           = 50
+  MAXNOSENSORS           = 25
   MAXCELLS               = 6
 
-  STACK_SIZE_LONGS       = 10000                        ' Need to test how much we need!
+  STACK_SIZE_LONGS       = 100                          ' Need to test how much we need!
 
 VAR
   long rxp
@@ -176,6 +176,7 @@ PUB stop()
     cognum := 0                                                                 '  mark stopped
   pinclear(rxp)                                                                 ' remove old settings
 
+{
 pub setgps(tlatitude, tlongitude, tspeed, talt, tfix, tsatno, thdop)
   longmove(@latitude, @tlatitude, 7)
 
@@ -190,6 +191,7 @@ pub setactuals(pspeeds, paspeeds, pangles, tmax)
 
 pub setflow(pflows)
   longmove(@flow, pflows, 2)
+'}
 
 pub setvoltage(tvoltage)
   voltage := tvoltage
@@ -197,14 +199,17 @@ pub setvoltage(tvoltage)
 pub setcurrent(tcurrent1, tcurrent2)
   current1, current2 := tcurrent1, tcurrent2
 
+{
 pub settemperature(ptemps)                                                      ' temperature telemetry
   longmove(@temps, ptemps, 4)
 
 pub setcells(count, pcells)
   batterycount := count
   longmove(@battery, pcells, count<#MAXCELLS)
+'}
 
 '' rethink this, the response needs to be called from the poll
+{
 pub setCommand(command)
 ' specify a command for us
 ' need to poll readrecCommand to get the incoming command
@@ -227,6 +232,7 @@ pub setSendCommand(prim, applicationIdt, valuet)
   s_commandPrim := prim
   s_applicationId := applicationIdt
   s_value := valuet
+'}
 
 PRI SendCommand() : retv
 ' have command saved ready for poll?
@@ -277,6 +283,7 @@ pri rxcheck() : rxbyte | o1
   else
     return -1
 
+{
 pri flv_getData(applicationIdt, subindex) : valuet | cellindex
 ' battery cell data, max MAXCELLS cells
   valuet := cellindex := subindex<<1                                            ' Bit 0-3: Cell id, 0 = 1&2, 2 = 3&4, 4 = 5&6
@@ -314,6 +321,7 @@ pri acc_getData(applicationIdt, subindex) : valuet
       valuet := round(roll *. 10.0)
     SENSOR_APPL_ID_PRESSURE:
       valuet := round(pressure *. 100.0)                                        ' 0.01hPa
+'}
 
 pri fas_getData(applicationIdt, subindex) : valuet
   case applicationIdt
@@ -324,6 +332,7 @@ pri fas_getData(applicationIdt, subindex) : valuet
     FSSP_DATAID_CURRENT2:
       valuet := round(current2*.10000.0)                                        ' in 0.1mA
 
+{
 pri actual(value) : valuet
 ' make 32bit signed value into 16bit unsigned and msb 1 if -ve
   valuet := value
@@ -340,11 +349,13 @@ pri flow_getData(index) : valuet
 
 pri temps_getData(index) : valuet
   valuet := temps[index]                                                        ' 0.01C
+'}
 
 pri sensor_getData(physicalId, applicationIdt, subindex) : valuet
   case_fast physicalId                                                          ' index from lookdown of physicalId
     DATA_ID_FAS:                                                                ' applicationId == FSSP_DATAID_VFAS
       valuet := fas_getData(applicationIdt, subindex)                           ' voltage * 0.01V
+{
     DATA_ID_GPS:                                                                          '
       valuet := gps_getData(applicationIdt, subindex)
     DATA_ID_ACTUALS:                                                            ' applicationId == FSSP_ACTUAL1-FSSP_ACTUAL4               '
@@ -358,6 +369,7 @@ pri sensor_getData(physicalId, applicationIdt, subindex) : valuet
     ' not enabled in validid
     DATA_ID_FLVSS:                                                              ' applicationId == FSSP_DATAID_CELLS
       valuet := flv_getData(applicationIdt, subindex)                           ' voltage per cell, 0.002V
+'}
 
 pri querysensorsent(Index) : retv
   return lastsensorindex[Index/_sensornoentries] == 0
@@ -474,7 +486,7 @@ con
   _sensornoentries              = 4                                             ' number entries for each sensor info
 
 dat
-' maximum of 50 sensors
+' maximum of 25 sensors
 _sensorCountEntries  long      (@_sensorsend - @_sensors)/2                     ' count of info, not count of sensors
 _sensorCount  long      (@_sensorsend - @_sensors)/(2*_sensornoentries)         ' count of info, not count of sensors
 '                       physical id            sensor id     subindex  delay(ms)
