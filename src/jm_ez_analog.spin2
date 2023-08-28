@@ -81,12 +81,14 @@ pub read() : result
   result := (rdpin(ap)-callo) * (orhi-orlo) / (calhi-callo)     ' mx
   result := orlo #> result+orlo <# orhi                         ' +b (restricted to range)
 
+{
 pub raw() : result
 
 '' Read analog level from pin
 '' -- not scaled/calibrated
 
   return rdpin(ap)
+'}
 
 con { license }
 
