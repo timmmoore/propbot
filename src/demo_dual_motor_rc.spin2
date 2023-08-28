@@ -53,7 +53,7 @@ CON { fixed io pins }
   BATTERY_ANALOG                = 48                            ' battery via resistor divider, 20K + 3K
   BATTERY_LOW                   = 0
   BATTERY_HIGH                  = 31427                         ' 19K93 + 3K003 resistor divider, max voltage is 24V * 3003/22933 -> 3.1427
-  BATTERY_DIVIDER               = 1223.4                        ' 31427/931.6 -> 24.0, battery max is 4.2V per cell (total 22.2V)
+  BATTERY_DIVIDER               = 1309.46 '1223.4               ' 31427/1309.46 -> 24.0, battery max is 4.2V per cell (total 22.2V)
   BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
   BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
@@ -177,7 +177,7 @@ VAR
     long    bLastIgnoreJoyStks
     long    bLastShowDriveStates
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fcurrentL, fcurrentR, fvoltage, bMinBattery
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -223,10 +223,10 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 wheels.showDriveStates()
             bLastShowDriveStates := bShowDriveStates
 
+        nLtAmps, nLtWatts, nRtAmps, nRtWatts := wheels.getCurrent()
         if bShowState <> bLastShowState
             'showServoPositions()
             if bShowState
-                nLtAmps, nLtWatts, nRtAmps, nRtWatts := wheels.getCurrent()
                 debug("  ltA=", sdec_long_(nLtAmps), ", rtA=", sdec_long_(nRtAmps))
             bLastShowState := bShowState
 
@@ -267,9 +267,8 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 priorSpeed := rcSpeed
 
         telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
-        fcurrentL, _, fcurrentR, _ := wheels.getCurrent()                       ' motor current telemetry
-        telemetry.setcurrent(fcurrentL, fcurrentR)
-        'if fvoltage <. BATTERY_MINIMUM                                          ' <. doesn't work
+        telemetry.setcurrent(nLtAmps, nRtAmps)
+        'if fvoltage <. BATTERY_MINIMUM                                          ' <. doesn't work, floating point comparisons do not work
         if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
             bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
