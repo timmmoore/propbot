@@ -79,7 +79,7 @@ CON { forward our interface constants }
     INVALID_VOLTAGE     = ltWheel.INVALID_VOLTAGE
 
     ' return value when user makes bad choice
-    INVALID_DET_MODE     = ltWheel.INVALID_DET_MODE
+    INVALID_DET_MODE    = ltWheel.INVALID_DET_MODE
 
 CON { test pins for LA measurement }
 
@@ -451,6 +451,7 @@ PUB getMaxSpeedForDistance() : nSpeed4dist
     'nSpeed4dist := ltWheel.getMaxSpeed()  ' return last specified user value
     nSpeed4dist := rtWheel.getMaxSpeed()  ' return last specified user value
 
+{
 PUB getLeftDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVars
 '' Return pointers to HDMI-debug data structures for LEFT motor-object instance
     nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVars := ltWheel.getDebugData()
@@ -458,6 +459,7 @@ PUB getLeftDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGrou
 PUB getRightDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVars
 '' Return pointers to HDMI-debug data structures for LEFT motor-object instance
     nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVars := rtWheel.getDebugData()
+'}
 
 CON { --- PUBLIC Utility Methods --- }
 
@@ -855,7 +857,7 @@ PRI distanceIn90ths(newPos, bIsLeftWheel) : n90ths | priorPos
         priorRtPos := newPos
 
 CON { --- HDMI Debug Support --- }
-
+{
 CON { Constants for HDMI Debug }
 
     DBG_GROUPS_CT = 1
@@ -933,7 +935,7 @@ PUB getDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVar
         debug("* -------------")
         debug("* Steer Sent: ", udec(nGroups), uhex_long(pGroupTitles), uhex_long(pGroupNames), uhex_long(pGroupVarCts), uhex_long(pGroupVars))
         debug("* =============")
-
+'}
 
 
 CON { license }
