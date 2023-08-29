@@ -53,7 +53,7 @@ CON { fixed io pins }
   BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 20K + 3K
   BATTERY_LOW                   = 0
   BATTERY_HIGH                  = 31427                         ' 19K93 + 3K003 resistor divider, max voltage is 24V * 3003/22933 -> 3.1427
-  BATTERY_DIVIDER               = 1309.46 '1223.4               ' 31427/1309.46 -> 24.0, battery max is 4.2V per cell (total 22.2V)
+  BATTERY_DIVIDER               = 1232.0                        ' 31427/1309.46 -> 24.0, battery max is 4.2V per cell (total 22.2V)
   BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
   BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
