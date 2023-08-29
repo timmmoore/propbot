@@ -44,8 +44,8 @@ CON { fixed io pins }
   SF_SDO   = 59  { O }
   SF_SDI   = 58  { I }
 
-  LA_CHAN0 = 56  { O }                                          ' logic analyzer
-  LA_CHAN1 = 57  { O }
+  'LA_CHAN0 = 56  { O }                                          ' logic analyzer
+  'LA_CHAN1 = 57  { O }
 
   SBUS_RX  = 55  { I }                                          ' RC receiver channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver telemetry
