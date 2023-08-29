@@ -106,14 +106,14 @@ PUB start(eMotorBasePin, eMotorVoltage, eDetectionMode) : ok | legalBase
 '' Specify motor control board connect location for this motor and start the driver
     ' setup runtime constants
     init(eMotorBasePin, eMotorVoltage, eDetectionMode)
-        params_ptr := @offset_fwd   ' point to driver variables
-        setTargetAccel(0)           ' do NOT move at startup
+    params_ptr := @offset_fwd   ' point to driver variables
+    setTargetAccel(0)           ' do NOT move at startup
 
-        ok := motorCog := coginit(NEWCOG, @driver, @pinbase) + 1
-        if motorCog == 0    ' did fail?
-            debug("!! ERROR filed to start Motor Control task")
-        else
-            debug("* Motor COG #", sdec_(motorCog- 1))
+    ok := motorCog := coginit(NEWCOG, @driver, @pinbase) + 1
+    if motorCog == 0    ' did fail?
+        debug("!! ERROR filed to start Motor Control task")
+    else
+        debug("* Motor COG #", sdec_(motorCog- 1))
 
 PUB stop()
 '' Stop cogs and release pins assigned to this motor
@@ -225,10 +225,10 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ' NOTES: 220413 -  at 14.8V 10_000 better on gravel surface  but too slow a ramp to 15_000 and PWR_14p8V to see if motors stay operational
     ' 50_000 for 12v & 18_5v
     ' dropped to 40K and 10K to stop motors faulting
-    ramp_fast   := 40_000                   ' 40k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
+    ramp_fast   := 35_000                   ' 35k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
     'ramp_fast   := 50_000                   ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
     'ramp_slo    := 8_000                    ' 6.5 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
-    ramp_slo    := 10_000                    ' 10k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
+    ramp_slo    := 8_000                    ' 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
     'ramp_slo    := 12_000                    ' 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
 
     motorIsReversed := FALSE    ' by default our motor direction is not reversed
@@ -325,7 +325,7 @@ PUB setMaxSpeed(speed) | limitSpeed
 '' Limit top-speed to {speed} where {speed} is [1 to 100]  (default is 75)
     limitSpeed :=  1 #> speed <# 100
     if limitSpeed <> speed
-        debug("! WARNING: driveAtPower() speed out of range (corrected):", udec_long(speed), " - must be [1 to 100]")
+        debug("! WARNING: setMaxSpeed() speed out of range (corrected):", udec_long(speed), " - must be [1 to 100]")
     debug("setMaxSpeed() ", udec_long(limitSpeed))
     maxSpeed := limitSpeed      ' remember user value
 
@@ -333,7 +333,7 @@ PUB setMaxSpeedForDistance(speed) | limitSpeed4dist
 '' Limit top-speed of driveDistance() operations to {speed} where {speed} is [1 to 100]  (default is 75)
     limitSpeed4dist :=  1 #> speed <# 100
     if limitSpeed4dist <> speed
-        debug("! WARNING: driveAtPower() speed out of range (corrected):", udec_long(speed), " - must be [1 to 100]")
+        debug("! WARNING: setMaxSpeedForDistance() speed out of range (corrected):", udec_long(speed), " - must be [1 to 100]")
     debug("setMaxSpeedForDistance() ", udec_long(limitSpeed4dist))
     maxSpeed4dist := limitSpeed4dist      ' remember user value
 
@@ -684,31 +684,11 @@ PUB validVoltageForChoice(userVoltage) : legalVoltage
 '' VALIDATE users' voltage choice returns legalVoltage or INVALID_VOLTAGE
     legalVoltage := userVoltage
     if user.MOTOR_TYPE == MOTR_DOCO_4KRPM
-        CASE userVoltage
-            ' NOTE 6.0V is not legal for this motor
-            PWR_7p4V:
-            PWR_11p1V:
-            PWR_12p0V:
-            PWR_14p8V:
-            PWR_18p5V:
-            PWR_22p2V:
-            PWR_24p0V:
-            ' NOTE 25.9V is not legal for this motor
-            OTHER:
-                legalVoltage := INVALID_VOLTAGE
+        if lookdown(userVoltage: PWR_7p4V..PWR_24p0V) == 0 ' 6.0V & 25.9V are not legal for this motor
+            legalVoltage := INVALID_VOLTAGE
     else
-        CASE userVoltage
-            PWR_6p0V:
-            PWR_7p4V:
-            PWR_11p1V:
-            PWR_12p0V:
-            PWR_14p8V:
-            PWR_18p5V:
-            PWR_22p2V:
-            PWR_24p0V:
-            PWR_25p9V:
-            OTHER:
-                legalVoltage := INVALID_VOLTAGE
+        if lookdown(userVoltage: PWR_6p0V..PWR_25p9V) == 0
+            legalVoltage := INVALID_VOLTAGE
     debug("*VAL* ", sdec_long(legalVoltage))
 
 PUB validMotorForChoice(userMotor) : legalMotor
@@ -724,12 +704,8 @@ PUB validMotorForChoice(userMotor) : legalMotor
 PUB validDetectModeForChoice(userDetMode) : legalMode
 '' VALIDATE users' detection mode choice returns legalMode or INVALID_DET_MODE
     legalMode := userDetMode
-    CASE userDetMode
-        user.BRD_AUTO_DET:
-        user.BRD_REV_A:
-        user.BRD_REV_B:
-        OTHER:
-            legalMode := INVALID_DET_MODE
+    if lookdown(userDetMode: BRD_AUTO_DET..BRD_REV_B) == 0
+        legalMode := INVALID_DET_MODE
     debug("*VAL* ", sdec_long(legalMode))
 
 
@@ -925,7 +901,7 @@ PRI getInternalDetectMode(eDetectMode) : eValidMode, bUserOverride | legalMode
     if legalMode <> VALUE_NOT_SET
         eValidMode := legalMode        ' record base pin number
 
-PRI confgurePowerLimits(userVoltage) | selectedPower
+PRI confgurePowerLimits(userVoltage) | selectedPower, index
 ' set up our motor drive limits based upon the user configured Voltage selection
     selectedPower := validVoltageForChoice(userVoltage)
     debug("* ENTRY CFG ", sdec_long(selectedPower))
@@ -1007,30 +983,19 @@ PRI confgurePowerLimits(userVoltage) | selectedPower
                 debug("*???* Unknown: ", sdec_long(selectedPower))
                 abort   ' SHOULD NEVER get here!
     else
-        CASE selectedPower
-            PWR_6p0V:
-            PWR_7p4V:
-            PWR_11p1V:
-                maxFwdIncreAtPwr := 90_000_000      ' anything above yields RPM 165.3, cts/Sec 248 (until fault at 170.6 256)
-                maxRevIncreAtPwr := -90_000_000     ' anything above yields RPM 165.3, cts/Sec 248 (until fault at 170.6 256)
-            PWR_12p0V:
-                maxFwdIncreAtPwr := 97_000_000      ' anything above yields RPM 181.3, cts/Sec 272 (until fault at 186.6 280)
-                maxRevIncreAtPwr := -97_000_000     ' anything above yields RPM 181.3, cts/Sec 272 (until fault at 186.6 280)
-            PWR_14p8V:
-                maxFwdIncreAtPwr := 120_000_000     ' anything above yields RPM 224.0, cts/Sec 336 (until fault at 229.8 344)
-                maxRevIncreAtPwr := -120_000_000    ' anything above yields RPM 224.0, cts/Sec 336 (until fault at 229.8 344)
-            PWR_18p5V:
-                maxFwdIncreAtPwr := 147_000_000     ' anything above yields RPM 272.0, cts/Sec 408 (until fault at 277.3 416)
-                maxRevIncreAtPwr := -147_000_000    ' anything above yields RPM 272.0, cts/Sec 408 (until fault at 277.3 416)
-            PWR_22p2V:
-                maxFwdIncreAtPwr := 172_000_000     ' anything above yields RPM 320.0, cts/Sec 480 (until fault at 325.3 480)
-                maxRevIncreAtPwr := -172_000_000    ' anything above yields RPM 320.0, cts/Sec 480 (until fault at 325.3 480)
-            PWR_24p0V:
-                maxFwdIncreAtPwr := 172_000_000     ' FAKE above yields RPM 320.0, cts/Sec 480 (until fault at 325.3 480)
-                maxRevIncreAtPwr := -172_000_000    ' FAKE above yields RPM 320.0, cts/Sec 480 (until fault at 325.3 480)
-            other:
-                debug("*???* Unknown: ", sdec_long(selectedPower))
-                abort   ' SHOULD NEVER get here!
+        ' is this more readable than the case statement?
+        if (index := lookdown(selectedPower:PWR_6p0V..PWR_11p1V, PWR_12p0V, PWR_14p8V, PWR_18p5V, PWR_22p2V..PWR_24p0V)) <> 0
+            ' 90_000_000  anything above yields RPM 165.3, cts/Sec 248 (until fault at 170.6 256)
+            ' 97_000_000  anything above yields RPM 181.3, cts/Sec 272 (until fault at 186.6 280)
+            ' 120_000_000 anything above yields RPM 224.0, cts/Sec 336 (until fault at 229.8 344)
+            ' 147_000_000 anything above yields RPM 272.0, cts/Sec 408 (until fault at 277.3 416)
+            ' 172_000_000 anything above yields RPM 320.0, cts/Sec 480 (until fault at 325.3 480)
+            ' 172_000_000     FAKE above yields RPM 320.0, cts/Sec 480 (until fault at 325.3 480)
+            maxFwdIncreAtPwr := lookup(index:  90_000_000,  90_000_000,  90_000_000,  97_000_000,  120_000_000,  147_000_000,  172_000_000,  172_000_000)
+            maxRevIncreAtPwr := lookup(index: -90_000_000, -90_000_000, -90_000_000, -97_000_000, -120_000_000, -147_000_000, -172_000_000, -172_000_000)
+        else
+            debug("*???* Unknown: ", sdec_long(selectedPower))
+            abort   ' SHOULD NEVER get here!
 
     fMotorVolts := 0.0  ' default
     if maxFwdIncreAtPwr <> VALUE_NOT_SET                ' if we have good motor then set rest of values
@@ -1069,7 +1034,6 @@ PRI motorVoltage(eSelectedPower) : fVolts
 
 CON ' --- HDMI Debug Support ---
 {
-
 CON { Constants for HDMI Debug }
 
     DBG_GROUPS_CT = 3
@@ -2258,7 +2222,8 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_nc       and     hall_, #%111                ' FWD point to FWD half of table
                 alts    hall_, #hall_angles
                 mov     angle_, 0-0
-                add     angle_, offset_fwd_          ' adjust phase offset for hall sensor
+    if_nc       add     angle_, offset_fwd_          ' adjust phase offset for hall sensor
+    if_c        add     angle_, offset_rev_          ' can spin up in either direction
     _ret_       mov     prior_angle, angle_          ' show we are already here
 
     '
