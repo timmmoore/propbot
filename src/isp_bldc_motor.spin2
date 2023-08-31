@@ -1,4 +1,4 @@
-'' =================================================================================================
+'' =================taskPostionSense================================================================================
 ''
 ''   File....... isp_bldc_motor.spin2
 ''   Purpose.... Object providing control interface for a single BLDC motor
@@ -150,11 +150,16 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ticks125ms := ticks1ms * 125
 
     ' set up debug variables
-    useDebug := FALSE
-    showHDMIDebug := FALSE
-    pinbase := validatePinBase(eMotorBasePin) 'VALUE_NOT_SET        ' record base pin number
+    'useDebug := FALSE
+    'showHDMIDebug := FALSE
+    pinbase := validatePinBase(eMotorBasePin)           ' record base pin number
 
-    bResetSenseData := FALSE
+    eUserDetectionMode, bUserForced := getInternalDetectMode(eDetectionMode)
+
+    ' set the mode now used by the driver to condition things (current-sense scaling, etc.)
+    eDetectedBoard := getBoardType()
+
+    'bResetSenseData := FALSE
 
     byte[@motorId] := 0 ' terminate an empty string
 
@@ -224,7 +229,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ' NOTES: 220410 -  at 14.8V 40_000 seems to fault a lot on gravel surface (i'm switching) to 10_000 and PWR_14p8V to see if motors stay operational (5_000 dog slow)
     ' NOTES: 220413 -  at 14.8V 10_000 better on gravel surface  but too slow a ramp to 15_000 and PWR_14p8V to see if motors stay operational
     ' 50_000 for 12v & 18_5v
-    ' dropped to 40K and 10K to stop motors faulting
+    ' dropped to 35K and 8K to stop motors faulting
     ramp_fast   := 35_000                   ' 35k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
     'ramp_fast   := 50_000                   ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
     'ramp_slo    := 8_000                    ' 6.5 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
@@ -262,10 +267,12 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
 
     confgurePowerLimits(user.DRIVE_VOLTAGE)
 
+{
     eUserDetectionMode, bUserForced := getInternalDetectMode(eDetectionMode)
 
     ' set the mode now used by the driver to condition things (current-sense scaling, etc.)
     eDetectedBoard := getBoardType()
+'}
 
     rSenseForBoard := VALUE_NOT_SET
     if eDetectedBoard == REV_A
@@ -273,12 +280,13 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     elseif eDetectedBoard == REV_B
         rSenseForBoard := F_REV_B_RSENSE
 
-
+{
 PUB startSenseCog() : ok
 '' Start the single motor sense task (tracks position of motor, distance traveled, etc.)
     ok := senseCog := cogspin(NEWCOG, taskPostionSense(), @taskStack) + 1
     if senseCog == 0    ' did fail?
         debug("!! ERROR filed to start Position Sense task")
+'}
 
 VAR { * user request values * }
 
@@ -301,8 +309,8 @@ VAR { * user request values * }
     LONG    motorPower          ' remember last power requested
     LONG    motorIsReversed     ' T/F where T means we need to flip direction: FWD <-> REV
     ' debug control variables
-    LONG    useDebug
-    LONG    showHDMIDebug
+    'LONG    useDebug
+    'LONG    showHDMIDebug
 
     ' values specific to user selected motor
     LONG    degrPerTic
@@ -375,6 +383,7 @@ PUB driveAtPower(power) | limitPwr, motorIncre, correctedPower
     if limitPwr <> power
         debug("! WARNING: driveAtPower() power out of range (corrected):", udec_long(power), " - must be [-100 to +100]")
     debug("-MOT- driveAtPower(", zstr_(@motorId), ") ", sdec_long(limitPwr), udec_long(ramp_fast), udec_long(ramp_slo))
+{
     if limitPwr < 0
         ' handle reverse speed
         if limitPwr < 0 - maxSpeed
@@ -383,7 +392,8 @@ PUB driveAtPower(power) | limitPwr, motorIncre, correctedPower
         ' handle forward speed
         if limitPwr > maxSpeed
             limitPwr := maxSpeed    ' cap at max speed forward
-    motorPower := limitPwr
+'}
+    motorPower := limitPwr := -maxSpeed #> limitPwr <# maxSpeed
     correctedPower := (motorIsReversed) ? 0 - limitPwr : limitPwr
     motorIncre := incrementForPower(correctedPower)
     setTargetAccel(motorIncre)
@@ -723,7 +733,7 @@ PUB hallTicInfoForMotor() : degreesPerTic, ticsPerRotation
         ticsPerRotation := 90
 
 CON ' --- TEST-USE ONLY Methods ---
-
+{
 PUB testSetLimit(newMaxLimit)
 '' TESTING USE: set override limit so we can characterize motor
     maxFwdIncreAtPwr := newMaxLimit
@@ -784,7 +794,7 @@ PUB testResetMaxValues()
 '' TESTING USE: reset our fault indicator that we tripped during test
     bResetSenseData := TRUE
     waitms(200) ' values should clear in 125ms
-
+'}
 
 CON ' --- PRIVATE (Utility) Methods ---
 
@@ -1200,9 +1210,9 @@ CON ' -- TASK: position tracking --
     ' at 7.813 ms
     'SENSE_LOOP_HZ = 128
 
-  STACK_SIZE_LONGS = 48
-  R360_WINDOW_SIZE = 5
-  HALL_WINDOW_SIZE = SENSE_LOOP_HZ
+'  STACK_SIZE_LONGS = 48
+'  R360_WINDOW_SIZE = 5
+'  HALL_WINDOW_SIZE = SENSE_LOOP_HZ
 
     ' shift 4 digits to left of decimal
   F_SCALE_AMPS = 10_000.0
@@ -1214,10 +1224,11 @@ CON ' -- TASK: position tracking --
   F_REV_A_RSENSE = 5        ' .005 Ohms
   F_REV_B_RSENSE = 3        ' .003 Ohms
 
+
 VAR { * sense buffer and stack arrays * }
+{
     LONG    taskStack[STACK_SIZE_LONGS]
     LONG    bResetSenseData
-
     ' summing sense values at 1/8 sec period
     LONG    hallCountsWindow[SENSE_LOOP_HZ]
     LONG    hallWinIndex
@@ -1230,9 +1241,9 @@ VAR { * sense buffer and stack arrays * }
     LONG    r360WinEntryCt
     LONG    r360degrPerSec
     LONG    r360WindowSum
-
+'}
     LONG    rSenseForBoard
-
+{
 PRI resetWindowAccumulators()
 ' reset our window accumulator data
     longfill(@hallCountsWindow, 0, HALL_WINDOW_SIZE) ' zero our windowed accum
@@ -1362,6 +1373,7 @@ PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loop
         ' code uses about 1_880 ticks. This is little over 9 uS  @200MHz clock
         '   wait remainder of 125 mSec before next sample
         waitct(senseStartTicks + ticks125ms)    ' wait to create "sense" time-base
+'}
 
 PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
     cntsInSec := nHallWindowSum                                      ' moving sum
@@ -1871,10 +1883,12 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_c        jmp     #.doSloRev
 .doSloFwd
                 cmps    drv_incr, tgt_incr          wc  ' Q: Should we slow dn or speed up? (CY=speed up)
-    if_c        mov     drv_state_, #DCS_SPIN_UP        ' CY=1: speed up
-    if_c        jmp     #.rampUp
-    if_nc       mov     drv_state_, #DCS_SPIN_DN        ' CY=0: slow down
-    if_nc       jmp     #.rampDn
+                modc    _nc                         wc  ' invert C
+                skip    #1                              ' skip cmps
+'    if_c        mov     drv_state_, #DCS_SPIN_UP        ' CY=1: speed up
+'    if_c        jmp     #.rampUp
+'    if_nc       mov     drv_state_, #DCS_SPIN_DN        ' CY=0: slow down
+'    if_nc       jmp     #.rampDn
 .doSloRev
                 cmps    drv_incr, tgt_incr          wc  ' Q: Should we slow dn or speed up? (nCY=speed up)
     if_nc       mov     drv_state_, #DCS_SPIN_UP        ' CY=0: speed up
@@ -1951,18 +1965,23 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 or      tgt_incr, tgt_incr              wz  ' Q: are we stopping? (if stopping don't use sign of tgt_incr)
     if_z        testb   drv_incr, #31                   wc  ' YES, moving FWD or REV? (bCY=REV)
     if_nz       testb   tgt_incr, #31                   wc  ' NO, moving FWD or REV? (bCY=REV)
-    if_c        jmp     #.haveRDnRev                        ' REV, go handle reverse
+.havefast
+                mov     curr_ramp, ramp_fast_
+    if_c        jmp     #.haveRUpFwd
+'    if_c        jmp     #.haveRDnRev                        ' REV, go handle reverse
 .haveRDnFwd
-                neg     final_ramp                          ' change to pos value for compare
-                cmps    final_ramp, ramp_fast_          wc  ' Q: is delta larger than ramp
-    if_nc       subs    drv_incr, ramp_fast_                ' YES, just add ramp value
-    if_c        subs    drv_incr, final_ramp                ' NO, add remaining final delta
-                jmp     #.justIncr                          ' increment motor angle, then exit
-.haveRDnRev
-                cmps    final_ramp, ramp_fast_          wc  ' Q: is delta larger than ramp
-    if_nc       adds    drv_incr, ramp_fast_                ' YES, just add ramp value
-    if_c        adds    drv_incr, final_ramp                ' NO, add remaining final delta
-                jmp     #.justIncr                          ' increment motor angle, then exit
+                jmp     #.haveRUpRev
+'                neg     final_ramp                          ' change to pos value for compare
+'                cmps    final_ramp, ramp_fast_          wc  ' Q: is delta larger than ramp
+'    if_nc       subs    drv_incr, ramp_fast_                ' YES, just add ramp value
+'    if_c        subs    drv_incr, final_ramp                ' NO, add remaining final delta
+'                jmp     #.justIncr                          ' increment motor angle, then exit
+'.haveRDnRev
+'                jmp     #.haveRUpFwd
+'                cmps    final_ramp, ramp_fast_          wc  ' Q: is delta larger than ramp
+'    if_nc       adds    drv_incr, ramp_fast_                ' YES, just add ramp value
+'    if_c        adds    drv_incr, final_ramp                ' NO, add remaining final delta
+'                jmp     #.justIncr                          ' increment motor angle, then exit
 .endRDnAtTgt
                 ' AT TARGET now adjust state
                 or      tgt_incr, tgt_incr              wz  ' Q: was our target ZERO? (are we stopping?)
@@ -1997,18 +2016,19 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 subs    final_ramp, drv_incr
                 ' now are we moving FWD or REV?
                 testb   drv_incr, #31               wc  ' YES, moving FWD or REV? (bCY=REV)
-    if_c        jmp     #.haveS2CRev                    ' REV, go handle reverse
+                jmp     #.havefast
+'    if_c        jmp     #.haveS2CRev                    ' REV, go handle reverse
 .haveS2CFwd
-                neg     final_ramp                        ' change to pos value for compare
-                cmps    final_ramp, ramp_fast_         wc  ' Q: is delta larger than ramp
-    if_nc       subs    drv_incr, ramp_fast_             ' YES, just add ramp value
-    if_c        subs    drv_incr, final_ramp              ' NO, add remaining final delta
-                jmp     #.justIncr                      ' increment motor angle, then exit
+'                neg     final_ramp                        ' change to pos value for compare
+'                cmps    final_ramp, ramp_fast_         wc  ' Q: is delta larger than ramp
+'    if_nc       subs    drv_incr, ramp_fast_             ' YES, just add ramp value
+'    if_c        subs    drv_incr, final_ramp              ' NO, add remaining final delta
+'                jmp     #.justIncr                      ' increment motor angle, then exit
 .haveS2CRev
-                cmps    final_ramp, ramp_fast_         wc  ' Q: is delta larger than ramp
-    if_nc       adds    drv_incr, ramp_fast_             ' YES, just add ramp value
-    if_c        adds    drv_incr, final_ramp              ' NO, add remaining final delta
-                jmp     #.justIncr                      ' increment motor angle, then exit
+'                cmps    final_ramp, ramp_fast_         wc  ' Q: is delta larger than ramp
+'    if_nc       adds    drv_incr, ramp_fast_             ' YES, just add ramp value
+'    if_c        adds    drv_incr, final_ramp              ' NO, add remaining final delta
+'                jmp     #.justIncr                      ' increment motor angle, then exit
 .endS2CAtZero
                 mov     drv_state_, #DCS_SPIN_UP        ' report that we are spinning up in new direction
                 jmp     #.rampUp        ' go immediately start moving in opposite direction
@@ -2217,13 +2237,13 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 rcl     hall_, #1
                 testp   pin_hall_u              wc
                 rcl     hall_, #1
-                testb   tgt_incr, #31           wc  ' Q: moving FWD or REV? (bCY=REV)
-    if_c        or      hall_ , #%1000              ' REV point to REV half of table
-    if_nc       and     hall_, #%111                ' FWD point to FWD half of table
+                testb   tgt_incr, #31           wc   ' Q: moving FWD or REV? (bCY=REV)
+                bitc    hall_, #3                    ' point to correct FWD/REV half of table
+                and     hall_, #%1111                ' make sure rest of hall_ is cleared
                 alts    hall_, #hall_angles
                 mov     angle_, 0-0
-    if_nc       add     angle_, offset_fwd_          ' adjust phase offset for hall sensor
-    if_c        add     angle_, offset_rev_          ' can spin up in either direction
+    if_c        add     angle_, offset_fwd_          ' adjust phase offset for hall sensor
+    if_nc       add     angle_, offset_rev_          ' can spin up in either direction
     _ret_       mov     prior_angle, angle_          ' show we are already here
 
     '
