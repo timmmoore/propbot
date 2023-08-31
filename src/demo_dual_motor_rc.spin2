@@ -47,13 +47,13 @@ CON { fixed io pins }
   'LA_CHAN0 = 56  { O }                                          ' logic analyzer
   'LA_CHAN1 = 57  { O }
 
-  SBUS_RX  = 55  { I }                                          ' RC receiver channels
-  SPORT_BI = 54  { I/O }                                        ' RC receiver telemetry
+  SBUS_RX  = 55  { I }                                          ' RC receiver SBUS channels
+  SPORT_BI = 54  { I/O }                                        ' RC receiver SPORT telemetry
 
   BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 20K + 3K
   BATTERY_LOW                   = 0
   BATTERY_HIGH                  = 31427                         ' 19K93 + 3K003 resistor divider, max voltage is 24V * 3003/22933 -> 3.1427
-  BATTERY_DIVIDER               = 1232.0                        ' 31427/1309.46 -> 24.0, battery max is 4.2V per cell (total 22.2V)
+  BATTERY_DIVIDER               = 1232.0                        ' value that makes reading match meter, battery max is 4.2V per cell (total 22.2V)
   BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
   BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
@@ -184,7 +184,6 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
-    'arm.gripClosed()
     debug("------")
     debug("- Lt Joy Hz - direction")
     debug("- Rt Joy Vt - speed")
@@ -228,7 +227,6 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
 
         nLtAmps, nLtWatts, nRtAmps, nRtWatts := wheels.getCurrent()
         if bShowState <> bLastShowState
-            'showServoPositions()
             if bShowState
                 debug("  ltA=", sdec_long_(nLtAmps), ", rtA=", sdec_long_(nRtAmps))
             bLastShowState := bShowState
@@ -255,8 +253,8 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
 
         if not bEmerCutoff
             rcSpeed, rcDirection := updPosnBothJoy()
-            if not bIgnoreJoySticks
-                rcDirection := 0 - rcDirection  ' invert this to apply to our motors
+            rcDirection := 0 - rcDirection                                      ' invert this to apply to our motors
+            ifnot bIgnoreJoySticks
                 if priorDirection <> rcDirection or priorSpeed <> rcSpeed
                     debug("- JOY ", sdec_long(rcSpeed), sdec_long(rcDirection))
                     wheels.driveDirection(rcSpeed, rcDirection)
@@ -271,7 +269,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
 
         telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
         telemetry.setcurrent(nLtAmps, nRtAmps)
-        'if fvoltage <. BATTERY_MINIMUM                                          ' <. doesn't work, floating point comparisons do not work
+        'if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, floating point comparisons do not work
         if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
             bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
