@@ -938,73 +938,37 @@ PRI confgurePowerLimits(userVoltage) | selectedPower, index
     maxRevIncreAtPwr := VALUE_NOT_SET
 
     if user.MOTOR_TYPE == MOTR_DOCO_4KRPM
-        CASE selectedPower
-            PWR_7p4V:
-                if eDetectedBoard == REV_B
-                    maxFwdIncreAtPwr := 385_000_000
-                    maxRevIncreAtPwr := -385_000_000
-                else
-                    ' maxFwdIncreAtPwr := 282_000_000   ' newDrv Characterized: 100% anything above yields RPM 1_885, cts/sec 754
-                    maxFwdIncreAtPwr := 282_000_000     ' 100% anything above yields RPM 1885.0, cts/Sec 754, @0.11A
-                    maxRevIncreAtPwr := -282_000_000    ' 100% anything above yields RPM 1885.0, cts/Sec 754, @0.11A
-            PWR_11p1V:
-                if eDetectedBoard == REV_B
-                    maxFwdIncreAtPwr := 287_500_000     ' *** seems low?
-                    maxRevIncreAtPwr := -287_500_000
-                else
-                    ' maxFwdIncreAtPwr := 545_000_000   ' newDrv Characterized: 100% anything above yields RPM 3_645, cts/sec 1_458
-                    maxFwdIncreAtPwr := 545_000_000     ' 100% anything above yields RPM 3645.0, cts/Sec 1458, @0.50A
-                    maxRevIncreAtPwr := -545_000_000    ' 100% anything above yields RPM 3645.0, cts/Sec 1458, @0.53A
-            PWR_12p0V:
-                if eDetectedBoard == REV_B
-                    maxFwdIncreAtPwr := 485_000_000
-                    maxRevIncreAtPwr := -485_000_000
-                else
-                    ' maxFwdIncreAtPwr := 335_000_000   ' newDrv Characterized: 100% anything above yields RPM 2_242, cts/sec 897
-                    maxFwdIncreAtPwr := 335_000_000     ' 100% anything above yields RPM 2242.0, cts/Sec 897, @0.14A
-                    maxRevIncreAtPwr := -335_000_000    ' 100% anything above yields RPM 2242.0, cts/Sec 897, @0.61A
-            PWR_14p8V:
-                if eDetectedBoard == REV_B
-                    maxFwdIncreAtPwr := 388_000_000
-                    maxRevIncreAtPwr := -388_000_000
-                else
-                    ' maxFwdIncreAtPwr := 377_500_000   ' newDrv Characterized: 100% anything above yields RPM 2_525, cts/sec 1_010
-                    maxFwdIncreAtPwr := 376_000_000     ' 100% anything above yields RPM 2517.0!, cts/Sec 1007, @0.88A
-                    maxRevIncreAtPwr := -376_000_000    ' 100% anything above yields RPM 2517.0!, cts/Sec 1007, @0.83A
-            PWR_18p5V:
-                if eDetectedBoard == REV_B
-                    maxFwdIncreAtPwr := 449_500_000
-                    maxRevIncreAtPwr := -449_500_000
-                else
-                    ' maxFwdIncreAtPwr :=  398_000_000  ' newDrv Characterized: 100% anything above yields RPM 2_662, cts/sec 1_065
-                    maxFwdIncreAtPwr := 398_000_000     ' 100% anything above yields RPM 2662.0, cts/Sec 1065, @0.89A
-                    maxRevIncreAtPwr := -398_000_000    ' 100% anything above yields RPM 2662.0, cts/Sec 1065, @0.84A
-            PWR_22p2V:
-                if eDetectedBoard == REV_B
-                    maxFwdIncreAtPwr := 420_000_000
-                    maxRevIncreAtPwr := -420_000_000
-                else
-                    ' maxFwdIncreAtPwr := 394_000_000   ' newDrv Characterized: 100% anything above yields RPM 2_637, cts/sec 1_055
-                    ' maxFwdIncreAtPwr := 410_000_000   ' by hand: 100% anything above yields RPM 2_745, cts/sec 1_098
-                    ' maxFwdIncreAtPwr := 420_000_000   ' by hand: 100% anything above yields RPM 2_810, cts/sec 1_124
-                    ' maxFwdIncreAtPwr := 430_000_000   ' by hand: 100% anything above yields RPM 2_877, cts/sec 1_151
-                    ' maxFwdIncreAtPwr := 440_000_000   ' by hand: 100% anything above yields RPM 2_940, cts/sec 1_178
-                    ' maxFwdIncreAtPwr := 450_000_000   ' by hand: 100% anything above yields RPM 3_010, cts/sec 1_204
-                    ' maxFwdIncreAtPwr := 460_000_000   ' by hand: 100% anything above yields RPM 3_077, cts/sec 1_231
-                    ' maxFwdIncreAtPwr := 470_000_000   ' by hand: 100% anything above yields RPM 3_145, cts/sec 1_258
-                    maxFwdIncreAtPwr := 470_000_000     ' 100% anything above yields RPM 3145.0, cts/Sec 1258, @0.78A
-                    maxRevIncreAtPwr := -470_000_000    ' 100% anything above yields RPM 3145.0, cts/Sec 1258, @0.77A
-            PWR_24p0V:
-                if eDetectedBoard == REV_B
-                    maxFwdIncreAtPwr := 460_000_000
-                    maxRevIncreAtPwr := -460_000_000
-                else
-                    ' maxFwdIncreAtPwr := 397_500_000   ' newDrv Characterized: 100% anything above yields RPM 2_660, cts/sec 1_064
-                    maxFwdIncreAtPwr := 391_000_000     ' 100% anything above yields RPM 2615.0, cts/Sec 1046, @0.620A
-                    maxRevIncreAtPwr := -391_000_000    ' 100% anything above yields RPM 2615.0, cts/Sec 1046, @0.640A
-            other:
-                debug("*???* Unknown: ", sdec_long(selectedPower))
-                abort   ' SHOULD NEVER get here!
+        if (index := lookdown(selectedPower:PWR_7p4V, PWR_11p1V, PWR_12p0V, PWR_14p8V, PWR_18p5V, PWR_22p2V, PWR_24p0V)) <> 0
+            if eDetectedBoard == REV_B
+                maxFwdIncreAtPwr := lookup(index:  385_000_000,  287_500_000,  485_000_000,  388_000_000,  449_500_000,  420_000_000,  460_000_000)
+                maxRevIncreAtPwr := lookup(index: -385_000_000, -287_500_000, -485_000_000, -388_000_000, -449_500_000, -420_000_000, -460_000_000)
+            else
+                    ' 282_000_000 100% anything above yields RPM 1885.0, cts/Sec 754, @0.11A
+                    ' 100% anything above yields RPM 1885.0, cts/Sec 754, @0.11A
+                    ' 545_000_000 100% anything above yields RPM 3645.0, cts/Sec 1458, @0.50A
+                    ' 100% anything above yields RPM 3645.0, cts/Sec 1458, @0.53A
+                    ' 335_000_000 100% anything above yields RPM 2242.0, cts/Sec 897, @0.14A
+                    ' 100% anything above yields RPM 2242.0, cts/Sec 897, @0.61A
+                    ' 376_000_000 100% anything above yields RPM 2517.0!, cts/Sec 1007, @0.88A
+                    ' 100% anything above yields RPM 2517.0!, cts/Sec 1007, @0.83A
+                    ' 376_000_000 by hand: 100% anything above yields RPM 2_745, cts/sec 1_098
+                    ' by hand: 100% anything above yields RPM 2_810, cts/sec 1_124
+                    ' by hand: 100% anything above yields RPM 2_877, cts/sec 1_151
+                    ' by hand: 100% anything above yields RPM 2_940, cts/sec 1_178
+                    ' by hand: 100% anything above yields RPM 3_010, cts/sec 1_204
+                    ' by hand: 100% anything above yields RPM 3_077, cts/sec 1_231
+                    ' by hand: 100% anything above yields RPM 3_145, cts/sec 1_258
+                    ' 470_000_000 100% anything above yields RPM 2662.0, cts/Sec 1065, @0.89A
+                    ' 100% anything above yields RPM 2662.0, cts/Sec 1065, @0.84A
+                    ' 100% anything above yields RPM 3145.0, cts/Sec 1258, @0.78A
+                    ' 100% anything above yields RPM 3145.0, cts/Sec 1258, @0.77A
+                    ' 391_000_000 100% anything above yields RPM 2615.0, cts/Sec 1046, @0.620A
+                    ' 100% anything above yields RPM 2615.0, cts/Sec 1046, @0.640A
+                maxFwdIncreAtPwr := lookup(index:  282_000_000,  545_000_000,  335_000_000,  376_000_000,  398_000_000,  470_000_000,  391_000_000)
+                maxRevIncreAtPwr := lookup(index: -282_000_000, -545_000_000, -335_000_000, -376_000_000, -398_000_000, -470_000_000, -391_000_000)
+        else
+            debug("*???* Unknown: ", sdec_long(selectedPower))
+            abort   ' SHOULD NEVER get here!
     else
         ' is this more readable than the case statement?
         if (index := lookdown(selectedPower:PWR_6p0V..PWR_11p1V, PWR_12p0V, PWR_14p8V, PWR_18p5V, PWR_22p2V..PWR_24p0V)) <> 0
@@ -1035,7 +999,7 @@ PRI setTargetAccel(nTgtIncr)
 
 PRI motorVoltage(eSelectedPower) : fVolts | index
     if (index := lookdown(eSelectedPower:PWR_6p0V..PWR_25p9V)) <> 0
-         fVolts := lookup(index:  6.0,  7.4,  11.1,  12.0,  14.8,  18.5,  22.2,  24.0, 25.9)
+         fVolts := lookup(index: 6.0, 7.4, 11.1, 12.0, 14.8, 18.5, 22.2, 24.0, 25.9)
     else
         debug("*???* Unknown: ", sdec_long(eSelectedPower))
         abort   ' SHOULD NEVER get here!
@@ -1677,7 +1641,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 ' ADC setup 1
                 wrpin   adc_modes+0, adc_pins           ' switch ADC to GIO calibration
                 wxpin   adc_fram, adc_pins              ' set count period to match our PWM frame width
-'                wxpin   #11, adc_pins                   ' (#11 = 2048-clock / 12-bit conversion)
                 wypin   #0, adc_pins
 
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
@@ -1699,6 +1662,18 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 rdpin   vio_levels+2, pin_adc_w_i
                 rdpin   vio_levels+3, pin_adc_cur_i
 
+{
+                sub     vio_levels+0, gio_levels+0      ' sub gio from vio to get range
+                sub     vio_levels+1, gio_levels+1      ' sub gio from vio to get range
+                sub     vio_levels+2, gio_levels+2      ' sub gio from vio to get range
+                sub     vio_levels+3, gio_levels+3      ' sub gio from vio to get range
+
+                qdiv    numerator, vio_levels+0         ' calculate our values from readings
+                qdiv    numerator, vio_levels+1
+                qdiv    numerator, vio_levels+2
+                qdiv    numerator, vio_levels+3
+
+}
                 sub     vio_levels+0, gio_levels+0      ' sub gio from vio to get range
                 sub     vio_levels+1, gio_levels+1      ' sub gio from vio to get range
                 sub     vio_levels+2, gio_levels+2      ' sub gio from vio to get range
@@ -1721,8 +1696,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 dirl    all_pins                        ' disable ADC pins for configuration
 
                 wrpin   adc_modes+2, adc_pins           ' switch ADC to pin sampling
-                'wxpin   adc_fram, adc_pins              ' set count period to match our PWM frame width
-                'wypin   #0, adc_pins                    ' set mode to incrment on highs, only (vs. #1 incr & decr)
 
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
 
@@ -1896,10 +1869,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 cmps    drv_incr, tgt_incr          wc  ' Q: Should we slow dn or speed up? (CY=speed up)
                 modc    _nc                         wc  ' invert C
                 skip    #1                              ' skip cmps and reuse following code
-'    if_c        mov     drv_state_, #DCS_SPIN_UP        ' CY=1: speed up
-'    if_c        jmp     #.rampUp
-'    if_nc       mov     drv_state_, #DCS_SPIN_DN        ' CY=0: slow down
-'    if_nc       jmp     #.rampDn
 .doSloRev
                 cmps    drv_incr, tgt_incr          wc  ' Q: Should we slow dn or speed up? (nCY=speed up)
     if_nc       mov     drv_state_, #DCS_SPIN_UP        ' CY=0: speed up
@@ -1979,20 +1948,8 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 .havefast
                 mov     curr_ramp, ramp_fast_               ' we want to ramp fast
     if_c        jmp     #.haveRUpFwd                        ' jmp to previous ramping code
-'    if_c        jmp     #.haveRDnRev                        ' REV, go handle reverse
 .haveRDnFwd
                 jmp     #.haveRUpRev                        ' jmp to previous ramping code
-'                neg     final_ramp                          ' change to pos value for compare
-'                cmps    final_ramp, ramp_fast_          wc  ' Q: is delta larger than ramp
-'    if_nc       subs    drv_incr, ramp_fast_                ' YES, just add ramp value
-'    if_c        subs    drv_incr, final_ramp                ' NO, add remaining final delta
-'                jmp     #.justIncr                          ' increment motor angle, then exit
-'.haveRDnRev
-'                jmp     #.haveRUpFwd
-'                cmps    final_ramp, ramp_fast_          wc  ' Q: is delta larger than ramp
-'    if_nc       adds    drv_incr, ramp_fast_                ' YES, just add ramp value
-'    if_c        adds    drv_incr, final_ramp                ' NO, add remaining final delta
-'                jmp     #.justIncr                          ' increment motor angle, then exit
 .endRDnAtTgt
                 ' AT TARGET now adjust state
                 or      tgt_incr, tgt_incr              wz  ' Q: was our target ZERO? (are we stopping?)
@@ -2028,18 +1985,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 ' now are we moving FWD or REV?
                 testb   drv_incr, #31               wc  ' YES, moving FWD or REV? (bCY=REV)
                 jmp     #.havefast                      ' jmp to previous ramp code
-'    if_c        jmp     #.haveS2CRev                    ' REV, go handle reverse
-.haveS2CFwd
-'                neg     final_ramp                        ' change to pos value for compare
-'                cmps    final_ramp, ramp_fast_         wc  ' Q: is delta larger than ramp
-'    if_nc       subs    drv_incr, ramp_fast_             ' YES, just add ramp value
-'    if_c        subs    drv_incr, final_ramp              ' NO, add remaining final delta
-'                jmp     #.justIncr                      ' increment motor angle, then exit
-.haveS2CRev
-'                cmps    final_ramp, ramp_fast_         wc  ' Q: is delta larger than ramp
-'    if_nc       adds    drv_incr, ramp_fast_             ' YES, just add ramp value
-'    if_c        adds    drv_incr, final_ramp              ' NO, add remaining final delta
-'                jmp     #.justIncr                      ' increment motor angle, then exit
 .endS2CAtZero
                 mov     drv_state_, #DCS_SPIN_UP        ' report that we are spinning up in new direction
                 jmp     #.rampUp        ' go immediately start moving in opposite direction
@@ -2106,20 +2051,16 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 rdpin   sense_i_, pin_adc_cur_i
 
                 sub     sense_u_, gio_levels+0      ' compute (numerator * (pin_level - gio_level)) >> 11
-                muls    sense_u_, scl_levels+0
-                'sar     sense_u_, #11
+                'muls    sense_u_, scl_levels+0
 
                 sub     sense_v_, gio_levels+1
-                muls    sense_v_, scl_levels+1
-                'sar     sense_v_, #11
+                'muls    sense_v_, scl_levels+1
 
                 sub     sense_w_, gio_levels+2
-                muls    sense_w_, scl_levels+2
-                'sar     sense_w_, #11
+                'muls    sense_w_, scl_levels+2
 
                 sub     sense_i_, gio_levels+3
-                muls    sense_i_, scl_levels+3
-                'sar     sense_i_, #11               ' reduced to milliVolts
+                'muls    sense_i_, scl_levels+3
 
                 mov     tmpY, duty_                 ' feed three CORDIC operations to get phase drive levels
                 shr     tmpY, #4
@@ -2293,9 +2234,9 @@ drvrTgglPnFld   LONG    TEST_PIN_LP_TOGL addpins 0  ' convert to pinfield
 drvrTggl2PnFld  LONG   TEST_PIN_UNKNOWN addpins 0  ' convert to pinfield
 '}
 
-adc_modes       LONG    p_adc_gio | p_count_highs 'p_adc       ' +0 : adc modes, by state
-                LONG    p_adc_vio | p_count_highs 'p_adc       ' +1
-                LONG    p_adc_1x | p_count_highs   ' +2 ' WAS p_adc_1x | p_adc
+adc_modes       LONG    p_adc_gio | p_count_highs   ' +0 : adc modes, by state
+                LONG    p_adc_vio | p_count_highs   ' +1
+                LONG    p_adc_1x  | p_count_highs   ' +2 ' WAS p_adc_1x | p_adc
 
 ' turn motor to view hall sequence ...  learn in known direction
 '   efficient: low current draw at given speed
@@ -2411,7 +2352,6 @@ pin_pwm_x_h     res 1       ' basepin + 15
 gio_levels      res 4
 vio_levels      res 4
 scl_levels      res 4
-
 ' ------------------------------
 '  PRECISE FORMAT:
 '   copied in-to driver each loop iteration
