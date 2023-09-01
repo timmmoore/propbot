@@ -149,26 +149,31 @@ PUB stop()
     ltWheel.stop()
     rtWheel.stop()
 
+{
 PUB setAcceleration(rate)
 '' NOT WORKING: Limit Acceleration to {rate} where {rate} is [??? - ???] mm/s squared (default is ??? mm/s squared)
     ltWheel.setAcceleration(rate)
     rtWheel.setAcceleration(rate)
+'}
 
 PUB setMaxSpeed(speed)
 '' Limit top-speed to {speed}
     ltWheel.setMaxSpeed(speed)
     rtWheel.setMaxSpeed(speed)
 
+
 PUB setMaxSpeedForDistance(speed)
 '' Limit top-speed of driveDistance() operations to {speed}
     ltWheel.setMaxSpeedForDistance(speed)
     rtWheel.setMaxSpeedForDistance(speed)
 
+{
 PUB calibrate()
 '' NOT WORKING: (we may need this?)
 '' have motor drivers determine fixed-offset constants
     ltWheel.calibrate()
     rtWheel.calibrate()
+'}
 
 PUB holdAtStop(bEnable)
 '' Informs the motor drivers to actively hold position (bEnable=true) or coast (bEnable=false) at end of motion
@@ -196,6 +201,7 @@ PUB driveDirection(power, direction) | ltPower, rtPower
     ltWheel.driveAtPower(rqstLtPower)
     rtWheel.driveAtPower(rqstRtPower)
 
+{
 PUB driveForDistance(leftDistance, rightDistance, eDistanceUnits)
 '' Control the forward direction or rate of turn of your robot using the {leftDistance} and {rightDistance} inputs.
 '' Turn both motors on then turn them off again when either reaches the specified distance {leftDistance} or
@@ -203,6 +209,7 @@ PUB driveForDistance(leftDistance, rightDistance, eDistanceUnits)
 '' AFFECTED BY: setAcceleration(), setMaxSpeedForDistance(), holdAtStop()
     ltWheel.driveForDistance(leftDistance, eDistanceUnits)
     rtWheel.driveForDistance(rightDistance, eDistanceUnits)
+'}
 
 PUB driveAtPower(leftPower, rightPower)
 '' Control the speed and direction of your robot using the {leftPower} and {rightPower} inputs.
@@ -489,8 +496,13 @@ PRI calcPowerForDirection(power, direction) : ltPower, rtPower | bIsLeft, absPow
     if limitDir <> 0
         bIsLeft := (limitDir < 0) ? true :false
         absDir := abs(limitDir)
-        ltPower := (bIsLeft) ? (absDir * limitPwr) / 100 : ((100 - absDir) * limitPwr) / 100
-        rtPower := (bIsLeft) ? ((100 - absDir) * limitPwr) / 100 : (absDir * limitPwr) / 100
+        {
+          change to better handle small changes of direction
+          when turning a direction, motor on that side stays at power
+          but other motor reduces as direction increases
+        }
+        ltPower := (bIsLeft) ? limitPwr {(absDir * limitPwr) / 100} : ((100 - absDir) * limitPwr) / 100
+        rtPower := (bIsLeft) ? ((100 - absDir) * limitPwr) / 100 : limitPwr '(absDir * limitPwr) / 100
 
     debug("* calcPowerForDirection(", sdec_long(power), ", ", sdec_long(direction), ") -> ", sdec_long(ltPower), sdec_long(rtPower))
 
@@ -620,7 +632,7 @@ PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr
 
         ltPosTrkHallTicks += hallCntsIn8thSec
 
-        ltWheel.updateSenseData(hallCntsIn8thSec, ltHallWindowSum)
+        'ltWheel.updateSenseData(hallCntsIn8thSec, ltHallWindowSum)
 
         ' ------------------------------------------
         ' PROCESS right motor
@@ -635,7 +647,7 @@ PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr
 
         rtPosTrkHallTicks += hallCntsIn8thSec
 
-        rtWheel.updateSenseData(hallCntsIn8thSec, rtHallWindowSum)
+        'rtWheel.updateSenseData(hallCntsIn8thSec, rtHallWindowSum)
         ' ------------------------------------------
         ' EVALUATE any motor stop requests
 
