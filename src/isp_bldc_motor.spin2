@@ -1,4 +1,4 @@
-'' =================taskPostionSense================================================================================
+'' =================taskPostionSense======================f==========================================================
 ''
 ''   File....... isp_bldc_motor.spin2
 ''   Purpose.... Object providing control interface for a single BLDC motor
@@ -8,8 +8,14 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... Feb 2022
 ''   Updated.... 21 Jul 2022
-''   Updated.... 26 Aug 2023 (timmoore)
+''   Updated.... 26-30 Aug 2023 (timmoore)
 ''                              comment out Optical Rotary Encoder 360P/R on pin 48/49 - timmoore
+''                              move pinbase validation code to before board detection
+''                              move board detection before using it to config motor parameters
+''                              use lookdown/lookup for parameter validation/configuration
+''                              comment out test code (readability while debugging motor faulting)
+''                              remove dup ramping code
+''                              fix initAngleFmHall - doesn't set offset_rev and if start in rev can go out of angle array bounds
 ''
 '' =================================================================================================
 
@@ -61,7 +67,7 @@ CON { Public Interface Constants }
 OBJ { objects / constants included by this object }
 
     user        :   "isp_bldc_motor_userconfig"     ' driver configuration
-    distConv    :   "isp_dist_utils"                ' distance conversion utils
+    'distConv    :   "isp_dist_utils"                ' distance conversion utils
 
 CON { test pins for LA measurement }
 
@@ -248,31 +254,27 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     maxSpeed4dist := 75      ' [1-100] default 75
 
     ' preset HDMI Monitor values
+{
     tvMaxMmPerSec_x10 := 0
     tvMaxFps_x10 := 0
     tvMaxMPH_x10 := 0
     tvMaxkPH_x10 := 0
+'}
 
     eUserSelectedVolts := VALUE_NOT_SET    ' ensure we don't drive motor unles we know the users' voltage!
 
     debug("* init values ", udec_long(dead_gap), udec_long(pwm_limit), udec_long(adc_fram), udec_long(duty_min), udec_long(duty_max))
     debug("*      values ", udec_long(duty_up), udec_long(duty_dn), udec_long(cfg_ctcks), udec_long(motr_ctcks))
 
+{
     circInMM_x10 := distConv.circInMMforDiaInInchFloat(user.WHEEL_DIA_IN_INCH)
     if circInMM_x10 <> 0
         if user.MOTOR_TYPE == MOTR_6_5_INCH
             tickInMM_x10 := circInMM_x10 / 90
     else
         tickInMM_x10 := 0
-
-    confgurePowerLimits(user.DRIVE_VOLTAGE)
-
-{
-    eUserDetectionMode, bUserForced := getInternalDetectMode(eDetectionMode)
-
-    ' set the mode now used by the driver to condition things (current-sense scaling, etc.)
-    eDetectedBoard := getBoardType()
 '}
+    confgurePowerLimits(user.DRIVE_VOLTAGE)
 
     rSenseForBoard := VALUE_NOT_SET
     if eDetectedBoard == REV_A
@@ -305,7 +307,7 @@ VAR { * user request values * }
     LONG    maxSpeed4dist       ' [1-100] default 75
     ' stop point in time based on passing mSec or tick counts
     LONG    motorStopMSecs      ' stop motor when we've passed this time in milliseconds
-    LONG    motorStopHallTicks  ' stop motor when we've passed this tick count
+    'LONG    motorStopHallTicks  ' stop motor when we've passed this tick count
     LONG    motorPower          ' remember last power requested
     LONG    motorIsReversed     ' T/F where T means we need to flip direction: FWD <-> REV
     ' debug control variables
@@ -321,13 +323,18 @@ VAR { * user request values * }
 
 PUB testSetMotorId(pIDStr) | lenUsed, actLen
 ' save name used in debug messages
+    strcopy(@motorId, pIdStr, MOTOR_ID_STRLEN)
+{
     actLen := strsize(pIDStr)
     lenUsed := (actLen > MOTOR_ID_STRLEN) ? MOTOR_ID_STRLEN : actLen
     bytemove(@motorId, pIDStr, lenUsed)
     BYTE[@motorId][lenUsed] := 0  ' add terminator
+'}
 
+{
 PUB setAcceleration(rate)
 '' NOT WORKING: Limit Acceleration to {rate} where {rate} is [??? - ???] mm/s squared (default is ??? mm/s squared)
+'}
 
 PUB setMaxSpeed(speed) | limitSpeed
 '' Limit top-speed to {speed} where {speed} is [1 to 100]  (default is 75)
@@ -345,19 +352,23 @@ PUB setMaxSpeedForDistance(speed) | limitSpeed4dist
     debug("setMaxSpeedForDistance() ", udec_long(limitSpeed4dist))
     maxSpeed4dist := limitSpeed4dist      ' remember user value
 
+{
 PUB calibrate()
 '' NOT WORKING: (we may need this?)
 '' have motor drivers determine fixed-offset constants
+'}
 
 PUB holdAtStop(bEnable)
 '' Informs the motor control cog to actively hold position (bEnable=true) or coast (bEnable=false) at end of motion
     stop_mode := (bEnable) ? SM_BRAKE : SM_FLOAT
 
+{
 PUB resetTracking()
 '' Resets the position tracking values returned by getDistance() and getRotations()
     posTrkHallTicks := 0    ' reset all of our trackers (they are incremented in sensor loop)
     waitms(200) ' values will clear in 125ms
-
+'}
+{
 PUB moveShaftToAngle(desiredAngle)
 '' TEST: force motor to specific angle
     if targetAngle == $ffffffff
@@ -365,15 +376,17 @@ PUB moveShaftToAngle(desiredAngle)
         debug("MOT: move to ", sdec(targetAngle))
     else
         debug("MOT: busy!!")
+'}
 
 CON { --- Subsystem Control --- }
-
+{
 PUB driveForDistance(distance, distanceUnits)
 '' Control the forward direction of this motor using the {distance} and {distanceUnits} inputs.
 '' Turn the motor on then turn it off again after it reaches the specified {distance} in {distanceUnits} [DDU_IN, DDU_CM, DDU_FT or DDU_M].
 '' AFFECTED BY:  setAcceleration(), setMaxSpeedForDistance(), holdAtStop()
     stopAfterDistance(distance, distanceUnits)
     driveAtPower(maxSpeed4dist)
+'}
 
 PUB driveAtPower(power) | limitPwr, motorIncre, correctedPower
 '' Control the speed and direction of this motor using the {power, [(-100) to 100]} input.
@@ -383,22 +396,13 @@ PUB driveAtPower(power) | limitPwr, motorIncre, correctedPower
     if limitPwr <> power
         debug("! WARNING: driveAtPower() power out of range (corrected):", udec_long(power), " - must be [-100 to +100]")
     debug("-MOT- driveAtPower(", zstr_(@motorId), ") ", sdec_long(limitPwr), udec_long(ramp_fast), udec_long(ramp_slo))
-{
-    if limitPwr < 0
-        ' handle reverse speed
-        if limitPwr < 0 - maxSpeed
-            limitPwr := 0 - maxSpeed    ' cap at max speed in reverse
-    else
-        ' handle forward speed
-        if limitPwr > maxSpeed
-            limitPwr := maxSpeed    ' cap at max speed forward
-'}
     motorPower := limitPwr := -maxSpeed #> limitPwr <# maxSpeed
     correctedPower := (motorIsReversed) ? 0 - limitPwr : limitPwr
     motorIncre := incrementForPower(correctedPower)
     setTargetAccel(motorIncre)
     'debug("-MOT- driveAtPower() EXIT ")
 
+{
 PUB stopAfterRotation(nRotationCount, eRotationUnits)
 '' Stops the motor after it reaches {rotationCount} of {rotationUnits} [DRU_HALL_TICKS, DRU_DEGREES, or DRU_ROTATIONS].
 '' USE WITH:  driveAtPower()
@@ -453,7 +457,8 @@ PUB stopAfterDistance(nDistance, eDistanceUnits) | fValue
         other:
             debug("! ERROR: invalid distanceUnits Stop Value:", udec_long(eDistanceUnits))
             abort
-
+'}
+{
 PUB stopAfterTime(nTime, eTimeUnits) | timeNow
 '' Stops the motor, after {time} specified in {timeUnits} [DTU_MILLISEC or DTU_SEC] has elapsed.
 '' USE WITH:  driveAtPower()
@@ -479,6 +484,7 @@ PUB stopAfterTime(nTime, eTimeUnits) | timeNow
 
     if motorStopMSecs > 0
         debug("* stop motor at ", udec_long(motorStopMSecs), ", now: ", udec_long(timeNow))
+'}
 
 PUB stopMotor()
 '' Stops the motor, killing any motion that was still in progress
@@ -502,6 +508,7 @@ PUB forwardIsReverse()
 
 CON { --- Subsystem Status --- }
 
+{
 PUB getDistance(eDistanceUnits) : nDistanceInUnits | fMMpTick, fValue
 '' Returns the distance in {distanceUnits} [DDU_MM, DDU_CM, DDU_IN, DDU_FT, DDU_M, DDU_KM, DDU_MI] travelled by this motor since last reset
     nDistanceInUnits := 0
@@ -547,6 +554,7 @@ PUB getRotationCount(eRotationUnits) : rotationCount
         other:
             debug("! ERROR: invalid rotationUnits Value:", udec_long(eRotationUnits))
             abort
+'}
 
 PUB getPower() : nPower
 '' Returns the last specified power value [-100 thru +100] for motor (will be zero if the motor is stopped).
@@ -554,8 +562,13 @@ PUB getPower() : nPower
 
 PUB getCurrent() : fAmps, fWatts
 '' Returns the latest current sense values
-    fAmps := FLOAT(tv_mA) /. F_SCALE_AMPS
-    fWatts := FLOAT(tv_mW) /. F_SCALE_WATTS
+    ' for REVA gain is 1, R is 0.005
+    ' for REVB gain is 50, R is 0.003
+    ' gain and R is combined into rSenseForBoard -> RevA rSenseForBoard 5, RevB rSenseForBoard 150
+    ' RevB. 10A, through 0,003R -> 0.03mV -> (50gain) -> 1.5V. 20A -> 3V, 10A -> 1.5V, 1A -> 0.15V
+    ' RevA. 10A, through 0.005R -> 0.05mV -> (1gain) -> 50mW, 20A -> 0.1V, 10A -> 50mV, 1A -> 5mV
+    fAmps := (sense_i_mV * SCALE_AMPS)/rSenseForBoard               ' scaled 10_000, in multiples of 0.1mA
+    fWatts := round(float(fAmps) *. fMotorVolts  *. (F_SCALE_WATTS/.F_SCALE_AMPS)) ' scaled 1_000, mW
 
 PUB getMaxSpeed() : nSpeed
 '' Returns the last specified {maxSpeed}
@@ -1018,29 +1031,14 @@ PRI confgurePowerLimits(userVoltage) | selectedPower, index
 PRI setTargetAccel(nTgtIncr)
     targetIncre := nTgtIncr
     debug("-MOT- ", sdec_long(targetIncre))
-    tvTargetIncreInM := nTgtIncr / 10_000
+    'tvTargetIncreInM := nTgtIncr / 10_000
 
-PRI motorVoltage(eSelectedPower) : fVolts
-    CASE eSelectedPower
-        PWR_6p0V:
-            fVolts := 6.0
-        PWR_7p4V:
-            fVolts := 7.4
-        PWR_11p1V:
-            fVolts := 11.1
-        PWR_12p0V:
-            fVolts := 12.0
-        PWR_14p8V:
-            fVolts := 14.8
-        PWR_18p5V:
-            fVolts := 18.5
-        PWR_22p2V:
-            fVolts := 22.2
-        PWR_24p0V:
-            fVolts := 24.0
-        other:
-            debug("*???* Unknown: ", sdec_long(eSelectedPower))
-            abort   ' SHOULD NEVER get here!
+PRI motorVoltage(eSelectedPower) : fVolts | index
+    if (index := lookdown(eSelectedPower:PWR_6p0V..PWR_25p9V)) <> 0
+         fVolts := lookup(index:  6.0,  7.4,  11.1,  12.0,  14.8,  18.5,  22.2,  24.0, 25.9)
+    else
+        debug("*???* Unknown: ", sdec_long(eSelectedPower))
+        abort   ' SHOULD NEVER get here!
 
 CON ' --- HDMI Debug Support ---
 {
@@ -1222,7 +1220,7 @@ CON ' -- TASK: position tracking --
   SCALE_WATTS = 1_000
 
   F_REV_A_RSENSE = 5        ' .005 Ohms
-  F_REV_B_RSENSE = 3        ' .003 Ohms
+  F_REV_B_RSENSE = 3*50     ' .003 Ohms * gain 50 from INA180B2
 
 
 VAR { * sense buffer and stack arrays * }
@@ -1375,7 +1373,9 @@ PRI taskPostionSense() | senseStartTicks, fValue, fFps, timeNow, eStopCtr,  loop
         waitct(senseStartTicks + ticks125ms)    ' wait to create "sense" time-base
 '}
 
+{
 PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
+
     cntsInSec := nHallWindowSum                                      ' moving sum
     posTrkHallTicks += nHallCntsIn8thSec
 
@@ -1389,7 +1389,7 @@ PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
     tvMaxSenseI := max(sense_i_mV, tvMaxSenseI)
     ' power calcs
     tv_mA := sense_i_mV / rSenseForBoard
-    tv_mW :=  trunc(tv_mA *. fMotorVolts *. F_SCALE_WATTS) ' * SCALE is give me 3 digits to right of decimal
+    tv_mW :=  round(float(tv_mA) *. fMotorVolts *. F_SCALE_WATTS) ' * SCALE is give me 3 digits to right of decimal
 
     if user.MOTOR_TYPE == MOTR_6_5_INCH
         ' pos is in hall-steps of 4Degr each.
@@ -1402,10 +1402,11 @@ PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
         kmh_x10 := distConv.mmps2kmh(mmPerSec_x10 * 10)
         mph_x10 := distConv.fps2mph(ftPerSec_x10)
 
-        tvMaxMmPerSec_x10 := max(mmPerSec_x10, tvMaxMmPerSec_x10)
-        tvMaxFps_x10 := max(ftPerSec_x10, tvMaxFps_x10)
-        tvMaxMPH_x10 := max(mph_x10, tvMaxMPH_x10)
-        tvMaxkPH_x10 := max(kmh_x10, tvMaxkPH_x10)
+        'tvMaxMmPerSec_x10 := max(mmPerSec_x10, tvMaxMmPerSec_x10)
+        'tvMaxFps_x10 := max(ftPerSec_x10, tvMaxFps_x10)
+        'tvMaxMPH_x10 := max(mph_x10, tvMaxMPH_x10)
+        'tvMaxkPH_x10 := max(kmh_x10, tvMaxkPH_x10)
+'}
 
 PRI max(a,b) : nMax
 ' return max of a or b
@@ -1562,19 +1563,21 @@ VAR { * Data Structure for PASM Driver * }
     LONG    fault                               ' 1 sequential long     written to 1 on fault (pins are floated when this happens)
 
 VAR { * Data for Motor Position Tracking * }
-
     '  ----- HDMI monitored! ----
+{
     LONG    tvRpm_x10
     LONG    rpm
     LONG    maxRpm
     LONG    cntsInSec
     LONG    deltaTicks
     LONG    tvMaxRpmIn10ths
+
     LONG    tvMaxFps_x10
     LONG    tvMaxMPH_x10
     LONG    tvMaxkPH_x10
     LONG    tvMaxMmPerSec_x10
     LONG    tvMaxCntsInSec
+
     LONG    tvTargetIncreInM
     LONG    tvMaxSenseI
     LONG    tv360rpm_x10
@@ -1589,9 +1592,10 @@ VAR { * Data for Motor Position Tracking * }
     LONG    mph_x10
     '  --------------------------
     LONG    posTrkHallTicks
+
     LONG    circInMM_x10
     LONG    tickInMM_x10
-
+'}
 
 VAR  {  Motor Parameters  }
 
@@ -1672,7 +1676,9 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
                 ' ADC setup 1
                 wrpin   adc_modes+0, adc_pins           ' switch ADC to GIO calibration
-                wxpin   #11, adc_pins                   ' (#11 = 2048-clock / 12-bit conversion)
+                wxpin   adc_fram, adc_pins              ' set count period to match our PWM frame width
+'                wxpin   #11, adc_pins                   ' (#11 = 2048-clock / 12-bit conversion)
+                wypin   #0, adc_pins
 
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
 
@@ -1693,6 +1699,11 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 rdpin   vio_levels+2, pin_adc_w_i
                 rdpin   vio_levels+3, pin_adc_cur_i
 
+                sub     vio_levels+0, gio_levels+0      ' sub gio from vio to get range
+                sub     vio_levels+1, gio_levels+1      ' sub gio from vio to get range
+                sub     vio_levels+2, gio_levels+2      ' sub gio from vio to get range
+                sub     vio_levels+3, gio_levels+3      ' sub gio from vio to get range
+
                 qdiv    numerator, vio_levels+0         ' calculate our values from readings
                 qdiv    numerator, vio_levels+1
                 qdiv    numerator, vio_levels+2
@@ -1710,8 +1721,8 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 dirl    all_pins                        ' disable ADC pins for configuration
 
                 wrpin   adc_modes+2, adc_pins           ' switch ADC to pin sampling
-                wxpin   adc_fram, adc_pins              ' set count period to match our PWM frame width
-                wypin   #0, adc_pins                    ' set mode to incrment on highs, only (vs. #1 incr & decr)
+                'wxpin   adc_fram, adc_pins              ' set count period to match our PWM frame width
+                'wypin   #0, adc_pins                    ' set mode to incrment on highs, only (vs. #1 incr & decr)
 
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
 
@@ -1884,7 +1895,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 .doSloFwd
                 cmps    drv_incr, tgt_incr          wc  ' Q: Should we slow dn or speed up? (CY=speed up)
                 modc    _nc                         wc  ' invert C
-                skip    #1                              ' skip cmps
+                skip    #1                              ' skip cmps and reuse following code
 '    if_c        mov     drv_state_, #DCS_SPIN_UP        ' CY=1: speed up
 '    if_c        jmp     #.rampUp
 '    if_nc       mov     drv_state_, #DCS_SPIN_DN        ' CY=0: slow down
@@ -1966,11 +1977,11 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_z        testb   drv_incr, #31                   wc  ' YES, moving FWD or REV? (bCY=REV)
     if_nz       testb   tgt_incr, #31                   wc  ' NO, moving FWD or REV? (bCY=REV)
 .havefast
-                mov     curr_ramp, ramp_fast_
-    if_c        jmp     #.haveRUpFwd
+                mov     curr_ramp, ramp_fast_               ' we want to ramp fast
+    if_c        jmp     #.haveRUpFwd                        ' jmp to previous ramping code
 '    if_c        jmp     #.haveRDnRev                        ' REV, go handle reverse
 .haveRDnFwd
-                jmp     #.haveRUpRev
+                jmp     #.haveRUpRev                        ' jmp to previous ramping code
 '                neg     final_ramp                          ' change to pos value for compare
 '                cmps    final_ramp, ramp_fast_          wc  ' Q: is delta larger than ramp
 '    if_nc       subs    drv_incr, ramp_fast_                ' YES, just add ramp value
@@ -2016,7 +2027,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 subs    final_ramp, drv_incr
                 ' now are we moving FWD or REV?
                 testb   drv_incr, #31               wc  ' YES, moving FWD or REV? (bCY=REV)
-                jmp     #.havefast
+                jmp     #.havefast                      ' jmp to previous ramp code
 '    if_c        jmp     #.haveS2CRev                    ' REV, go handle reverse
 .haveS2CFwd
 '                neg     final_ramp                        ' change to pos value for compare
@@ -2096,19 +2107,19 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
                 sub     sense_u_, gio_levels+0      ' compute (numerator * (pin_level - gio_level)) >> 11
                 muls    sense_u_, scl_levels+0
-                sar     sense_u_, #11
+                'sar     sense_u_, #11
 
                 sub     sense_v_, gio_levels+1
                 muls    sense_v_, scl_levels+1
-                sar     sense_v_, #11
+                'sar     sense_v_, #11
 
                 sub     sense_w_, gio_levels+2
                 muls    sense_w_, scl_levels+2
-                sar     sense_w_, #11
+                'sar     sense_w_, #11
 
                 sub     sense_i_, gio_levels+3
                 muls    sense_i_, scl_levels+3
-                sar     sense_i_, #11               ' reduced to milliVolts
+                'sar     sense_i_, #11               ' reduced to milliVolts
 
                 mov     tmpY, duty_                 ' feed three CORDIC operations to get phase drive levels
                 shr     tmpY, #4
@@ -2251,15 +2262,15 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
 '---+-----------+---+---+---+-------------------+---+---+---+---+---+-----------+
 all_pins        LONG    (15 << 6) + 0           ' all-pins variable (0 addpins 15) needs ADD/OR of basepin
-drive_pins      LONG    (6 << 6) + 8            ' drive-pins variable (+8 addpins 6) needs ADD of basepin
-adc_pins        LONG    (4 << 6) + 0            ' drive-pins variable (+0 addpins 4) needs ADD/OR of basepin
+drive_pins      LONG    (6 << 6) + 8            ' !! should this be 5, since we only need 6 pins not 7?, drive-pins variable (+8 addpins 5) needs ADD of basepin
+adc_pins        LONG    (4 << 6) + 0            ' drive-pins variable (+0 addpins 4) needs ADD/OR of basepin, note total of 5 pins
 pwmt            LONG    %000_000000_01_01000_0  ' PWM true (P_BITDAC | P_PWM_TRIANGLE)
 pwmn            LONG    %001_000000_01_01000_0  ' PWM not (P_INVERT_OUTPUT | P_BITDAC | P_PWM_TRIANGLE)
 adc_fram        LONG    0                       ' set ADC to full PWM frame counts [was: LONG    FRAME]
 fram            LONG    0                       ' PWM frame: width=FRAME/2, div sysclk by 1 (no division) [was: LONG (FRAME / 2) << 16 + 1 ]
 bias            LONG    0                       ' PWM center-frame bias [was: LONG    FRAME / 4]
 third           LONG    1 FRAC 3                ' 120 degrees
-numerator       LONG    3300 << 11              ' numerator for ADC calculations:     3.3V << 11 BITS
+numerator       LONG    5000 '3300 << 11              ' numerator for ADC calculations:     3.3V << 11 BITS
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
 maxPos          LONG    $7FFF_FFFF              ' max positive signed value
 ramp_thresh     LONG    25_000_000              ' fm zero - slow ramp to here then fast ramp ( ~1/5 of 0-max )
@@ -2282,8 +2293,8 @@ drvrTgglPnFld   LONG    TEST_PIN_LP_TOGL addpins 0  ' convert to pinfield
 drvrTggl2PnFld  LONG   TEST_PIN_UNKNOWN addpins 0  ' convert to pinfield
 '}
 
-adc_modes       LONG    p_adc_gio | p_adc       ' +0 : adc modes, by state
-                LONG    p_adc_vio | p_adc       ' +1
+adc_modes       LONG    p_adc_gio | p_count_highs 'p_adc       ' +0 : adc modes, by state
+                LONG    p_adc_vio | p_count_highs 'p_adc       ' +1
                 LONG    p_adc_1x | p_count_highs   ' +2 ' WAS p_adc_1x | p_adc
 
 ' turn motor to view hall sequence ...  learn in known direction
