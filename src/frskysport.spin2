@@ -328,9 +328,9 @@ pri fas_getData(applicationIdt, subindex) : valuet
     FSSP_DATAID_VFAS:
       valuet := round(voltage*.100.0)                                           ' in 0.01V
     FSSP_DATAID_CURRENT1:
-      valuet := round(current1*.10000.0)                                        ' in 0.1mA, smartport spec is 0.1A but can override unit in tx
+      valuet := current1                                                        ' in 0.1mA, smartport spec is 0.1A but can override unit in tx
     FSSP_DATAID_CURRENT2:
-      valuet := round(current2*.10000.0)                                        ' in 0.1mA
+      valuet := current2                                                        ' in 0.1mA
 
 {
 pri actual(value) : valuet
