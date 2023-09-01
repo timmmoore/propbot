@@ -226,6 +226,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
             bLastShowDriveStates := bShowDriveStates
 
         nLtAmps, nLtWatts, nRtAmps, nRtWatts := wheels.getCurrent()
+        'debug("  ltA=", sdec_long_(nLtAmps), ", rtA=", sdec_long_(nRtAmps))
         if bShowState <> bLastShowState
             if bShowState
                 debug("  ltA=", sdec_long_(nLtAmps), ", rtA=", sdec_long_(nRtAmps))
