@@ -127,8 +127,10 @@ PUB start(leftBasePin, rightBasePin, driveVoltage, leftDetectMode, rightDetectMo
     rtWheel.forwardIsReverse()
 
     ' init user tracking vars
+{
     motorStopHallTicks := 0
     motorStopMSecs := 0
+}
     rqstPower := 0
     rqstLtPower := 0
     rqstRtPower := 0
@@ -161,12 +163,12 @@ PUB setMaxSpeed(speed)
     ltWheel.setMaxSpeed(speed)
     rtWheel.setMaxSpeed(speed)
 
-
+{
 PUB setMaxSpeedForDistance(speed)
 '' Limit top-speed of driveDistance() operations to {speed}
     ltWheel.setMaxSpeedForDistance(speed)
     rtWheel.setMaxSpeedForDistance(speed)
-
+}
 {
 PUB calibrate()
 '' NOT WORKING: (we may need this?)
@@ -221,6 +223,7 @@ PUB driveAtPower(leftPower, rightPower)
     ltWheel.driveAtPower(rqstLtPower)
     rtWheel.driveAtPower(rqstRtPower)
 
+{
 PUB stopAfterRotation(nRotationCount, eRotationUnits) | degreesPerTic, ticsPerRotation
 '' Stops both motors, after either of the motors reaches {rotationCount} of {rotationUnits} [DRU_HALL_TICKS, DRU_DEGREES, or DRU_ROTATIONS].
 '' USE WITH: driveDirection(), drive()
@@ -311,6 +314,7 @@ PUB stopAfterTime(nTime, eTimeUnits) | timeNow
 
     if motorStopMSecs > 0
         debug("* stop motor at ", udec_long(motorStopMSecs), ", now: ", udec_long(timeNow))
+'}
 
 PUB stopMotors()
 '' Stops both motors, killing any motion that was still in progress
@@ -452,12 +456,13 @@ PUB getMaxSpeed() : nSpeed
     'nSpeed := ltWheel.getMaxSpeed()  ' return last specified user value
     nSpeed := rtWheel.getMaxSpeed()  ' return last specified user value
 
+{
 PUB getMaxSpeedForDistance() : nSpeed4dist
 '' Returns the last specified {maxSpeedForDistance}
     ' NOTE: they both contain same value so return only right-wheel value
     'nSpeed4dist := ltWheel.getMaxSpeed()  ' return last specified user value
     nSpeed4dist := rtWheel.getMaxSpeed()  ' return last specified user value
-
+}
 {
 PUB getLeftDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVars
 '' Return pointers to HDMI-debug data structures for LEFT motor-object instance
@@ -488,21 +493,21 @@ PUB validDetectModeForChoice(userDetMode) : legalMode
 
 CON { --- PRIVATE Utility Methods --- }
 
-PRI calcPowerForDirection(power, direction) : ltPower, rtPower | bIsLeft, absPower, absDir, limitPwr, limitDir
+PRI calcPowerForDirection(power, direction) : ltPower, rtPower | limitPwr, limitDir, ReducedPower
 ' determine porportional power based on direction
     limitPwr :=  -100 #> power <# 100
     limitDir :=  -100 #> direction <# 100
-    ltPower := rtPower := limitPwr
-    if limitDir <> 0
-        bIsLeft := (limitDir < 0) ? true :false
-        absDir := abs(limitDir)
-        {
-          change to better handle small changes of direction
-          when turning a direction, motor on that side stays at power
-          but other motor reduces as direction increases
-        }
-        ltPower := (bIsLeft) ? limitPwr {(absDir * limitPwr) / 100} : ((100 - absDir) * limitPwr) / 100
-        rtPower := (bIsLeft) ? ((100 - absDir) * limitPwr) / 100 : limitPwr '(absDir * limitPwr) / 100
+    {
+      changed to better handle small changes of direction
+      when turning towards a direction
+        motor on other side stays at power
+        motor on direction towards reduces in power as direction increases
+        e.g. if turning towards right, left motor stays at power, right motor is reduced
+        Note: doesn't spin in place, since reduced power motor doesn't reverse
+    }
+    ReducedPower := ((100 - abs(limitDir)) * limitPwr) / 100                    ' calculate reduced power for turning
+    ltPower := ((limitDir <= 0)) ? limitPwr : ReducedPower                      ' which side if either should be reducedpower
+    rtPower := ((limitDir >= 0)) ? limitPwr : ReducedPower
 
     debug("* calcPowerForDirection(", sdec_long(power), ", ", sdec_long(direction), ") -> ", sdec_long(ltPower), sdec_long(rtPower))
 
@@ -566,10 +571,12 @@ VAR { Data for Motor Position Tracking }
     '  --------------------------
     long    hallCntsIn8thSec
 
+{
     ' USER REQUESTS
     '  Position Tracking vars
     long    motorStopHallTicks
     long    motorStopMSecs
+}
     '  Drive vars
     long    rqstPower
     long    rqstDirection
@@ -651,6 +658,7 @@ PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr
         ' ------------------------------------------
         ' EVALUATE any motor stop requests
 
+{
         ' if user set time/distance to stop then stop if we are past the time or distance
         if motorStopMSecs > 0
             timeNow := getms()
@@ -661,7 +669,7 @@ PRI taskPostionSense() | senseStartTicks, timeNow, eStopCtr
             if ltPosTrkHallTicks > motorStopHallTicks or rtPosTrkHallTicks > motorStopHallTicks
                 stopMotors()
                 motorStopHallTicks := 0 ' and clear user request
-
+'}
         'pintoggle(TEST_PIN_SNS_LP_ACTV)    ' end of active side
 
         ' ------------------------------------------
