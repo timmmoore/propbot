@@ -207,7 +207,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
 
 
     ' setup driver parameters based on clock rate
-    charge_time := ticks1us
+    'charge_time := ticks1us
     dead_gap    := (ticks1us * 260) / 1_000 ' (was OFFSET) 260 of these made into "value nS"
     pwm_limit   := (frame_cnt / 2) - (dead_gap  / 2)        'PWM duty hard limit 1/2 freq of PWM
 
@@ -251,7 +251,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     drv_state := DCS_Unknown
 
     maxSpeed := 75            ' [1-100] default 75
-    maxSpeed4dist := 75      ' [1-100] default 75
+    'maxSpeed4dist := 75      ' [1-100] default 75
 
     ' preset HDMI Monitor values
 {
@@ -304,10 +304,12 @@ VAR { * user request values * }
     LONG    maxRevIncreAtPwr
     ' user max speeds
     LONG    maxSpeed            ' [1-100] default 75
+{
     LONG    maxSpeed4dist       ' [1-100] default 75
     ' stop point in time based on passing mSec or tick counts
     LONG    motorStopMSecs      ' stop motor when we've passed this time in milliseconds
     'LONG    motorStopHallTicks  ' stop motor when we've passed this tick count
+}
     LONG    motorPower          ' remember last power requested
     LONG    motorIsReversed     ' T/F where T means we need to flip direction: FWD <-> REV
     ' debug control variables
@@ -344,6 +346,7 @@ PUB setMaxSpeed(speed) | limitSpeed
     debug("setMaxSpeed() ", udec_long(limitSpeed))
     maxSpeed := limitSpeed      ' remember user value
 
+{
 PUB setMaxSpeedForDistance(speed) | limitSpeed4dist
 '' Limit top-speed of driveDistance() operations to {speed} where {speed} is [1 to 100]  (default is 75)
     limitSpeed4dist :=  1 #> speed <# 100
@@ -351,7 +354,7 @@ PUB setMaxSpeedForDistance(speed) | limitSpeed4dist
         debug("! WARNING: setMaxSpeedForDistance() speed out of range (corrected):", udec_long(speed), " - must be [1 to 100]")
     debug("setMaxSpeedForDistance() ", udec_long(limitSpeed4dist))
     maxSpeed4dist := limitSpeed4dist      ' remember user value
-
+}
 {
 PUB calibrate()
 '' NOT WORKING: (we may need this?)
@@ -568,15 +571,17 @@ PUB getCurrent() : fAmps, fWatts
     ' RevB. 10A, through 0,003R -> 0.03mV -> (50gain) -> 1.5V. 20A -> 3V, 10A -> 1.5V, 1A -> 0.15V
     ' RevA. 10A, through 0.005R -> 0.05mV -> (1gain) -> 50mW, 20A -> 0.1V, 10A -> 50mV, 1A -> 5mV
     fAmps := (sense_i_mV * SCALE_AMPS)/rSenseForBoard               ' scaled 10_000, in multiples of 0.1mA
-    fWatts := round(float(fAmps) *. fMotorVolts  *. (F_SCALE_WATTS/.F_SCALE_AMPS)) ' scaled 1_000, mW
+    fWatts := round(float(fAmps) *. fMotorVolts *. (F_SCALE_WATTS/.F_SCALE_AMPS)) ' scaled 1_000, mW
 
 PUB getMaxSpeed() : nSpeed
 '' Returns the last specified {maxSpeed}
     nSpeed := maxSpeed  ' return last specified user value
 
+{
 PUB getMaxSpeedForDistance() : nSpeed4dist
 '' Returns the last specified {maxSpeedForDistance}
     nSpeed4dist := maxSpeed4dist  ' return last specified user value
+}
 
 PUB getStatus() : eStatus
 '' Returns status of motor drive state for this motor: enumerated constant: DS_Unknown, DS_MOVING, DS_HOLDING, or DS_OFF
@@ -1352,8 +1357,8 @@ PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
 
     tvMaxSenseI := max(sense_i_mV, tvMaxSenseI)
     ' power calcs
-    tv_mA := sense_i_mV / rSenseForBoard
-    tv_mW :=  round(float(tv_mA) *. fMotorVolts *. F_SCALE_WATTS) ' * SCALE is give me 3 digits to right of decimal
+    tv_mA := (sense_i_mV * SCALE_AMPS)/ rSenseForBoard
+    tv_mW :=  round(float(tv_mA) *. fMotorVolts *. (F_SCALE_WATTS/.F_SCALE_AMPS)) ' * SCALE is give me 3 digits to right of decimal
 
     if user.MOTOR_TYPE == MOTR_6_5_INCH
         ' pos is in hall-steps of 4Degr each.
@@ -1583,7 +1588,7 @@ VAR  {  Motor Parameters  }
     LONG    ramp_slo        ' subtract this every 500 uSec to ramp down to slower speed
 
 ' -----------------------------------
-    LONG    charge_time     ' delay between driving h/l side of driver (never drive both at once)
+    'LONG    charge_time     ' delay between driving h/l side of driver (never drive both at once)
     LONG    frame_cnt       ' clock-tics for period of PWM_RATE_IN_HZ
 
 DAT  {  Motor DRIVER  }
@@ -1637,6 +1642,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 wrpin   pwmt, pin_pwm_w_h
 
                 wxpin   fram, drive_pins                '  and set PWM frame width, too
+                wypin   #0, drive_pins                  ' make sure pwm is off
 
                 ' ADC setup 1
                 wrpin   adc_modes+0, adc_pins           ' switch ADC to GIO calibration
@@ -1699,10 +1705,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
 
-                ' if we are to freewheel the motor let's float all drive pins
-                cmp     stop_mode_, #SM_FLOAT       wz  ' Q: should motor be freewheeling?
-    if_z        dirl    drive_pins                      ' YES, float all control pins (make them inputs)
-
                 dirl    pin_hall_u                      ' remake HALL pins inputs (they were in-between ADC and PWM pins)
                 dirl    pin_hall_v
                 dirl    pin_hall_w
@@ -1716,24 +1718,27 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 mov     tgt_incr, #0                    ' just in case
                 mov     sv_tgt_incr, #0                 ' just in case
                 mov     fwdrev, #0                      ' just in case
-                mov     angle_, #0                       ' just in case
+                mov     angle_, #0                      ' just in case
 
                 ' do initial read of parms so control loop can use them
                 setq    #DRVR_PARAMS_LONGS_COUNT-1      ' load fresh parameter table (13 DRVR_PARAMS_LONGS_COUNT longs)
                 rdlong  params_ptr_+1, params_ptr_
 
-                ' preset our starting angle
-                'call    #.initAngleFmHall      ' NOTE: may not need this as SPIN_UP does this
+                ' we have loaded parameters now so check stop_mode, drive pins are floating from above
+                cmp     stop_mode_, #SM_FLOAT       wz  ' Q: should motor be freewheeling?
+    if_nz       call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk first time enters ctlMotor
+    if_nz       dirh    drive_pins                      ' NO, set control pins back to output
+    if_z        dirl    drive_pins                      ' Yes, float drive pins
 
                 ' reset timer (schedule next control time)
-                getct   ctrlEndTix                      ' get now
-                addct1  ctrlEndTix, cfg_ctcks_          '   add in next time we need to run
+ '               getct   ctrlEndTix                      ' get now
+ '               addct1  ctrlEndTix, cfg_ctcks_          '   add in next time we need to run
                 ' start driver
-                jmp     #.drvMotor
+'                jmp     #.drvMotor
     ' -------------------------------------------------------------------------
 
 
-.loop           jnct1   #.ctlMotor      ' if not time for control loop just go to drive loop
+'.loop           jnct1   #.ctlMotor      ' if not time for control loop just go to drive loop
     ' =========================================================================
     '  MOTOR DRIVE LOOP - runs at 2.0 kHz (500.0 uSec period)
     '       time to adjust angle...
@@ -1814,6 +1819,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 mov     angle_, #0                      ' just in case
                 'call    #.initAngleFmHall               ' figure out where motor is once again
                 mov     drv_state_, #DCS_STOPPED        ' reset fault -> to stopped
+                                                        ' drive_pins were floated when detect fault
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: are we floating pins during stop?
     if_nz       dirh    drive_pins                      ' NO, set control pins back to output
                 ' if we were faulted, we are already stopped so just do nothing if new stop request
@@ -1854,26 +1860,26 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
 .notInStop
                 ' first do we have same sign?
-                testb   drv_incr, #31               wc   ' find dual '-' signs (CY=both nega)
-                testb   tgt_incr, #31               andc ' (bCY=REV)
+                testb   drv_incr, #31               wc    ' find dual '-' signs (CY=both nega)
+                testb   tgt_incr, #31               andc  ' (bCY=REV)
     if_c        jmp     #.endSameChk
-                testbn  drv_incr, #31               wc   ' find dual '+' signs (CY=both posi)
-                testbn  tgt_incr, #31               andc ' (bnCY=FWD)
+                testbn  drv_incr, #31               wc    ' find dual '+' signs (CY=both posi)
+                testbn  tgt_incr, #31               andc  ' (bnCY=FWD)
 .endSameChk
     if_nc       jmp     #.notSame
 .haveSame       ' let's change speed
                 ' we have prior and new with same sign, so should we slow down or speed up?
-                testb   tgt_incr, #31               wc  ' (bCY=REV)
+                testb   tgt_incr, #31               wc    ' (bCY=REV)
     if_c        jmp     #.doSloRev
 .doSloFwd
-                cmps    drv_incr, tgt_incr          wc  ' Q: Should we slow dn or speed up? (CY=speed up)
-                modc    _nc                         wc  ' invert C
-                skip    #1                              ' skip cmps and reuse following code
+                cmps    drv_incr, tgt_incr          wc    ' Q: Should we slow dn or speed up? (CY=speed up)
+                modc    _nc                         wc    ' invert C
+                skip    #1                                ' skip cmps and reuse following code
 .doSloRev
-                cmps    drv_incr, tgt_incr          wc  ' Q: Should we slow dn or speed up? (nCY=speed up)
-    if_nc       mov     drv_state_, #DCS_SPIN_UP        ' CY=0: speed up
+                cmps    drv_incr, tgt_incr          wc    ' Q: Should we slow dn or speed up? (nCY=speed up)
+    if_nc       mov     drv_state_, #DCS_SPIN_UP          ' CY=0: speed up
     if_nc       jmp     #.rampUp
-    if_c        mov     drv_state_, #DCS_SPIN_DN        ' CY=1: slow down
+    if_c        mov     drv_state_, #DCS_SPIN_DN          ' CY=1: slow down
     if_c        jmp     #.rampDn
     ' ------------------------------------
 .notSame    ' we have prior and new but NOT the same sign, let's slowdown then change direction
@@ -1886,50 +1892,50 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 .currRqst   ' No new request, continue with
             '  current request
     ' -------------------------------------------------------------------------
-.chkStop        cmp     drv_state_, #DCS_STOPPED    wz  ' Q: Stopped?
-    if_z        jmp     #.endRqst                       ' YES, motor STOPPED, just exit (w/o increment)
+.chkStop        cmp     drv_state_, #DCS_STOPPED    wz    ' Q: Stopped?
+    if_z        jmp     #.endRqst                         ' YES, motor STOPPED, just exit (w/o increment)
                 ' motor is running, if ramp do ramp, else increment
     ' -------------------------------------------------------------------------
-.chkUp          cmp     drv_state_, #DCS_SPIN_UP    wz  ' Q: Spinning Up?
-    if_nz       jmp     #.chkDn                         ' NO, check next
+.chkUp          cmp     drv_state_, #DCS_SPIN_UP    wz    ' Q: Spinning Up?
+    if_nz       jmp     #.chkDn                           ' NO, check next
     ' ------------------------------------
 .rampUp
                 ' if we don't have it, preset our starting angle (assume motor moved during float!)
-                cmp     stop_mode_, #SM_FLOAT       wz  ' Q: are we floating pins at stop?
-    if_z        or      drv_incr, drv_incr          wz  ' -and- are we stopped, just about to spin up?
-    if_z        call    #.initAngleFmHall               ' then, let's first get motor initial angle for smooth startup
+                cmp     stop_mode_, #SM_FLOAT       wz    ' Q: are we floating pins at stop?
+    if_z        or      drv_incr, drv_incr          wz    ' -and- are we stopped, just about to spin up?
+    if_z        call    #.initAngleFmHall                 ' then, let's first get motor initial angle for smooth startup
                 ' if we are at target, stop the ramp effort
-                cmps    drv_incr, tgt_incr          wz ' Q: Did we match target?
-    if_z        jmp     #.endRUpAtSpeed                  ' YES, (Matched) go mark done
+                cmps    drv_incr, tgt_incr          wz    ' Q: Did we match target?
+    if_z        jmp     #.endRUpAtSpeed                   ' YES, (Matched) go mark done
                 ' do next UP adjustment or set at-speed
-                abs     abs_incr, drv_incr              ' get abs(tgt_incr)
-                cmps    abs_incr, ramp_thresh       wc  ' Q: too early to ramp up fast?
-    if_nc       mov     curr_ramp, ramp_fast_           ' NO, use fast ramp rate
-    if_c        mov     curr_ramp, ramp_slo_            ' YES, use slow ramp rate
+                abs     abs_incr, drv_incr                ' get abs(tgt_incr)
+                cmps    abs_incr, ramp_thresh       wc    ' Q: too early to ramp up fast?
+    if_nc       mov     curr_ramp, ramp_fast_             ' NO, use fast ramp rate
+    if_c        mov     curr_ramp, ramp_slo_              ' YES, use slow ramp rate
                 ' calculate how far we are from desired
                 mov     final_ramp, tgt_incr              ' compute our delta from curr to target
                 subs    final_ramp, drv_incr
                 ' now are we moving FWD or REV?
-                testb   tgt_incr, #31               wc  ' Q: moving FWD or REV? (bCY=REV)
-    if_c        jmp     #.haveRUpRev                    ' YES, CY says go do REV
+                testb   tgt_incr, #31               wc    ' Q: moving FWD or REV? (bCY=REV)
+    if_c        jmp     #.haveRUpRev                      ' YES, CY says go do REV
 .haveRUpFwd
                 cmps    final_ramp, curr_ramp         wc  ' Q: is delta larger than ramp
-    if_nc       adds    drv_incr, curr_ramp             ' YES, just add ramp value
+    if_nc       adds    drv_incr, curr_ramp               ' YES, just add ramp value
     if_c        adds    drv_incr, final_ramp              ' NO, add remaining final delta
-                jmp     #.justIncr                      ' increment motor angle, then exit
+                jmp     #.justIncr                        ' increment motor angle, then exit
 .haveRUpRev
                 neg     final_ramp                        ' change to pos value for compare
                 cmps    final_ramp, curr_ramp         wc  ' Q: is delta larger than ramp
-    if_nc       subs    drv_incr, curr_ramp             ' YES, just add ramp value
+    if_nc       subs    drv_incr, curr_ramp               ' YES, just add ramp value
     if_c        subs    drv_incr, final_ramp              ' NO, add remaining final delta
-                jmp     #.justIncr                      ' increment motor angle, then exit
+                jmp     #.justIncr                        ' increment motor angle, then exit
 .endRUpAtSpeed
-                mov     drv_state_, #DCS_AT_SPEED       ' YES, show we got to desired speed!
-                jmp     #.endRqst                       ' motor AT_SPEED, just exit (w/o increment)
+                mov     drv_state_, #DCS_AT_SPEED         ' YES, show we got to desired speed!
+                jmp     #.endRqst                         ' motor AT_SPEED, just exit (w/o increment)
 
     ' -------------------------------------------------------------------------
-.chkDn          cmp     drv_state_, #DCS_SPIN_DN    wz  ' Q: Spinning Down?
-    if_nz       jmp     #.chkSlow2Chg                   ' NO, check next
+.chkDn          cmp     drv_state_, #DCS_SPIN_DN    wz    ' Q: Spinning Down?
+    if_nz       jmp     #.chkSlow2Chg                     ' NO, check next
     ' ------------------------------------
 .rampDn
                 ' do next DOWN adjustment ends with AT_SPEED or STOPPED
@@ -1987,7 +1993,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 jmp     #.havefast                      ' jmp to previous ramp code
 .endS2CAtZero
                 mov     drv_state_, #DCS_SPIN_UP        ' report that we are spinning up in new direction
-                jmp     #.rampUp        ' go immediately start moving in opposite direction
+                jmp     #.rampUp                        ' go immediately start moving in opposite direction
 
     ' -------------------------------------------------------------------------
 .justIncr   ' just do our increment of angle and we're done!
@@ -2100,7 +2106,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 add     drive_u_, bias              ' add center-bias and dead-time offsets to update PWMs
                 add     drive_v_, bias
                 add     drive_w_, bias
-
+                                                    ' if drive_pins are floating then pwm isn't output
                 add     drive_u_, dead_gap_         ' dead-gap was OFFSET
                 wypin   drive_u_, pin_pwm_u_l
                 sub     drive_u_, dead_gap_         ' dead-gap was OFFSET
@@ -2128,7 +2134,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 signx   tmpY, #7                       ' sign-extend bit7
                 add     pos_, tmpY                     ' add to current pos_
 
-                setq    #DRVR_PARAMS_LONGS_COUNT-1                       ' load fresh parameter table (13 DRVR_PARAMS_LONGS_COUNT longs)
+                setq    #DRVR_PARAMS_LONGS_COUNT-1      ' load fresh parameter table (13 DRVR_PARAMS_LONGS_COUNT longs)
                 rdlong  params_ptr_+1, params_ptr_
 
                 cmpm    angle_, prior_angle  wcz     ' if angle has changed, forward or reverse?
@@ -2165,12 +2171,15 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 getct   loop_dtcks_                 ' how long was this iteration? send to host
                 sub     loop_dtcks_, drvrSrtTix
 
-                setq    #DRVR_STATUS_LONGS_COUNT-1                       ' write drive[3]/sense[4]/hall/pos/duty/err/ticks[2]/state to hub
+                setq    #DRVR_STATUS_LONGS_COUNT-1      ' write drive[3]/sense[4]/hall/pos/duty/err/ticks[2]/state to hub
                 wrlong  drive_u_, ptra
                 ' wait for rest of time here...
 '.motWtLp
 '                jnct2   #.motWtLp                   ' wait until delay expires
-                jmp     #.loop                      ' main loop
+                'jmp     #.loop                      ' main loop
+.loop           jnct1   #.ctlMotor                      ' if not time for control loop just go to drive loop
+                jmp     #.drvMotor
+
 '}
 
     ' =========================================================================
@@ -2182,28 +2191,28 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 .noWait4adc     RET
 
 .initAngleFmHall
-                ' init angle & prior from current motor position
+                                                        ' init angle & prior from current motor position
                 testp   pin_hall_w              wc      ' read hall effect sensor
                 rcl     hall_, #1
                 testp   pin_hall_v              wc
                 rcl     hall_, #1
                 testp   pin_hall_u              wc
                 rcl     hall_, #1
-                testb   tgt_incr, #31           wc   ' Q: moving FWD or REV? (bCY=REV)
-                bitc    hall_, #3                    ' point to correct FWD/REV half of table
-                and     hall_, #%1111                ' make sure rest of hall_ is cleared
+                testb   tgt_incr, #31           wc      ' Q: moving FWD or REV? (bCY=REV)
+                bitc    hall_, #3                       ' point to correct FWD/REV half of table
+                and     hall_, #%1111                   ' make sure rest of hall_ is cleared
                 alts    hall_, #hall_angles
                 mov     angle_, 0-0
-    if_c        add     angle_, offset_fwd_          ' adjust phase offset for hall sensor
-    if_nc       add     angle_, offset_rev_          ' can spin up in either direction
-    _ret_       mov     prior_angle, angle_          ' show we are already here
+    if_c        add     angle_, offset_fwd_             ' adjust phase offset for hall sensor
+    if_nc       add     angle_, offset_rev_             ' can spin up in either direction
+    _ret_       mov     prior_angle, angle_             ' show we are already here
 
     '
     ' =========================================================================
 
 '---+-----------+---+---+---+-------------------+---+---+---+---+---+-----------+
-all_pins        LONG    (15 << 6) + 0           ' all-pins variable (0 addpins 15) needs ADD/OR of basepin
-drive_pins      LONG    (6 << 6) + 8            ' !! should this be 5, since we only need 6 pins not 7?, drive-pins variable (+8 addpins 5) needs ADD of basepin
+all_pins        LONG    (13 << 6) + 0           ' all-pins variable (0 addpins 13) needs ADD/OR of basepin, skip last 2 pwm pins, not used
+drive_pins      LONG    (5 << 6) + 8            ' !! should this be 5, since we only need 6 pins not 7?, drive-pins variable (+8 addpins 5) needs ADD of basepin
 adc_pins        LONG    (4 << 6) + 0            ' drive-pins variable (+0 addpins 4) needs ADD/OR of basepin, note total of 5 pins
 pwmt            LONG    %000_000000_01_01000_0  ' PWM true (P_BITDAC | P_PWM_TRIANGLE)
 pwmn            LONG    %001_000000_01_01000_0  ' PWM not (P_INVERT_OUTPUT | P_BITDAC | P_PWM_TRIANGLE)
