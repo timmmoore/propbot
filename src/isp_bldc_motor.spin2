@@ -8,7 +8,7 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... Feb 2022
 ''   Updated.... 21 Jul 2022
-''   Updated.... 26-30 Aug 2023 (timmoore)
+''   Updated.... 26Aug-2Sep 2023 (timmoore)
 ''                              comment out Optical Rotary Encoder 360P/R on pin 48/49 - timmoore
 ''                              move pinbase validation code to before board detection
 ''                              move board detection before using it to config motor parameters
@@ -16,6 +16,9 @@
 ''                              comment out test code (readability while debugging motor faulting)
 ''                              remove dup ramping code
 ''                              fix initAngleFmHall - doesn't set offset_rev and if start in rev can go out of angle array bounds
+''                              fix drive_pin init
+''                                  move check for stop_mode_ until after params have been loaded for first time,
+''                                  and if brake mode call initAngleFmHall so motors do not jerk on startup
 ''
 '' =================================================================================================
 
@@ -180,22 +183,18 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     debug("MOT: ", udec(fwdDegrees), uhex_long(offset_fwd))
     debug("     ", udec(revDegrees), uhex_long(offset_rev))
 
-    ' new build up our hall angle table for specific motor
+    ' new build up our hall angle and position increment table for specific motor
     if user.MOTOR_TYPE == MOTR_6_5_INCH
         longmove(@hall_angles, @hltbAngles, 16)
-    else
-        longmove(@hall_angles, @hltbAngl4k, 16)
-
-    ' new build up our position increment table for specific motor
-    if user.MOTOR_TYPE == MOTR_6_5_INCH
         bytemove(@deltas, @deltas65, 64)
     else
+        longmove(@hall_angles, @hltbAngl4k, 16)
         bytemove(@deltas, @deltas4k, 64)
 
-' average is middle plus deflection for forward or reverse
-'  responsiveness of motor to desire
-'  middle value is angular diff and motor postion relative to hall position
-'  deflection is direction and speed dependent
+    ' average is middle plus deflection for forward or reverse
+    '  responsiveness of motor to desire
+    '  middle value is angular diff and motor postion relative to hall position
+    '  deflection is direction and speed dependent
 
     frame_cnt := (ticks1us * (1_000_000_000 / PWM_RATE_IN_HZ)) / 1_000
     debug(" - Calc FRAME: ", udec(frame_cnt))
@@ -205,28 +204,27 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     fram        :=    (frame_cnt / 2) << 16 + 1   ' PWM frame: width=FRAME/2, div sysclk by 1 (no division)
     bias        :=    frame_cnt / 4               ' PWM center-frame bias
 
-
     ' setup driver parameters based on clock rate
-    'charge_time := ticks1us
+    ' charge_time := ticks1us
     dead_gap    := (ticks1us * 260) / 1_000 ' (was OFFSET) 260 of these made into "value nS"
     pwm_limit   := (frame_cnt / 2) - (dead_gap  / 2)        'PWM duty hard limit 1/2 freq of PWM
 
     ' .. and set up rest
 
-' orig higher power code used this
+    ' orig higher power code used this
     duty_min    := 100 << 4 #> (dead_gap / 2) << 4
-'    duty_min    := dead_gap << 4 #> dead_gap << 4
-' Chip'snew code adjusted this, why?
-'    duty_min    := 200 << 4 #> dead_gap << 4
+    '    duty_min    := dead_gap << 4 #> dead_gap << 4
+    ' Chip'snew code adjusted this, why?
+    '    duty_min    := 200 << 4 #> dead_gap << 4
     duty_max    := (pwm_limit  << 4) / 2 <# pwm_limit << 4      ' ok
     'duty_max    := ((pwm_limit  << 4) / 4) * 3 <# pwm_limit << 4    ' BAD
     'duty_max    := ((pwm_limit  << 4) / 8) * 5 <# pwm_limit << 4    ' BAD
-' orig higher power code used this
+    ' orig higher power code used this
     duty_up     := 18
     duty_dn     := 4
-' Chip'snew code adjusted this, why?
-'    duty_up     := 8   ' this drops our top-end power by 45%
-'    duty_dn     := 2
+    ' Chip'snew code adjusted this, why?
+    '    duty_up     := 8   ' this drops our top-end power by 45%
+    '    duty_dn     := 2
     cfg_ctcks   := ticks500us               ' drive control loop period
     motr_ctcks  := ticks10p23us             ' motor control loop period
     stop_mode   := SM_FLOAT                 ' enum: [SM_FLOAT, SM_BRAKE]
@@ -236,11 +234,10 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ' NOTES: 220413 -  at 14.8V 10_000 better on gravel surface  but too slow a ramp to 15_000 and PWR_14p8V to see if motors stay operational
     ' 50_000 for 12v & 18_5v
     ' dropped to 35K and 8K to stop motors faulting
-    ramp_fast   := 35_000                   ' 35k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
+    ramp_fast   := 45_000                   ' 35k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
     'ramp_fast   := 50_000                   ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
     'ramp_slo    := 8_000                    ' 6.5 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
     ramp_slo    := 8_000                    ' 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
-    'ramp_slo    := 12_000                    ' 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
 
     motorIsReversed := FALSE    ' by default our motor direction is not reversed
     fault := FALSE
@@ -251,10 +248,10 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     drv_state := DCS_Unknown
 
     maxSpeed := 75            ' [1-100] default 75
-    'maxSpeed4dist := 75      ' [1-100] default 75
+{
+    maxSpeed4dist := 75      ' [1-100] default 75
 
     ' preset HDMI Monitor values
-{
     tvMaxMmPerSec_x10 := 0
     tvMaxFps_x10 := 0
     tvMaxMPH_x10 := 0
@@ -323,15 +320,9 @@ VAR { * user request values * }
 
     BYTE    motorId[MOTOR_ID_STRLEN+1]
 
-PUB testSetMotorId(pIDStr) | lenUsed, actLen
+PUB testSetMotorId(pIDStr)
 ' save name used in debug messages
     strcopy(@motorId, pIdStr, MOTOR_ID_STRLEN)
-{
-    actLen := strsize(pIDStr)
-    lenUsed := (actLen > MOTOR_ID_STRLEN) ? MOTOR_ID_STRLEN : actLen
-    bytemove(@motorId, pIDStr, lenUsed)
-    BYTE[@motorId][lenUsed] := 0  ' add terminator
-'}
 
 {
 PUB setAcceleration(rate)
@@ -585,6 +576,7 @@ PUB getMaxSpeedForDistance() : nSpeed4dist
 
 PUB getStatus() : eStatus
 '' Returns status of motor drive state for this motor: enumerated constant: DS_Unknown, DS_MOVING, DS_HOLDING, or DS_OFF
+    eStatus := DS_Unknown                               ' if not one of the following status
     if isStopped()
         if stop_mode == SM_BRAKE
             eStatus := DS_HOLDING
@@ -592,8 +584,6 @@ PUB getStatus() : eStatus
             eStatus := DS_OFF
     elseif isReady()
         eStatus := DS_MOVING
-    else
-        eStatus := DS_Unknown
 
 PUB getDriverState() : eDrvrState
 '' Return Enum [DCS_*] value representing state of driver
@@ -722,11 +712,8 @@ PUB validVoltageForChoice(userVoltage) : legalVoltage
 PUB validMotorForChoice(userMotor) : legalMotor
 '' VALIDATE users' motor choice returns legalMotor or INVALID_MOTOR
     legalMotor := userMotor
-    CASE userMotor
-        MOTR_6_5_INCH:
-        MOTR_DOCO_4KRPM:
-        OTHER:
-            legalMotor := INVALID_MOTOR
+    if lookdown(userMotor: MOTR_6_5_INCH, MOTR_DOCO_4KRPM) == 0
+        legalMotor := INVALID_MOTOR
     debug("*VAL* ", sdec_long(legalMotor))
 
 PUB validDetectModeForChoice(userDetMode) : legalMode
@@ -855,9 +842,17 @@ PRI incrementForPower(nUserPower) : nMotorIncre
         ' this is a STOP request
         nMotorIncre := 0    ' stop!
 
-PRI offsetsForMotor(eMotorType) : fwdDegrees, revDegrees | ofsDegr
+PRI offsetsForMotor(eMotorType) : fwdDegrees, revDegrees | ofsDegr, index
     case eMotorType
       MOTR_DOCO_4KRPM:
+        index := lookdown(user.DRIVE_VOLTAGE: PWR_7p4V..PWR_24p0V)
+        if eDetectedBoard == REV_B
+          if (ofsDegr := lookup(index: 33, 33, 39, 40, 36, 37, 45)) == 0
+              ofsDegr := 45
+        else
+          if (ofsDegr := lookup(index: 52, 53, 53, 53, 54, 54, 53)) == 0
+              ofsDegr := 53
+{
         ' NOTES:
         ' 15 degrees per tic so +- 15 is our offset?
         if user.DRIVE_VOLTAGE == PWR_7p4V
@@ -876,6 +871,7 @@ PRI offsetsForMotor(eMotorType) : fwdDegrees, revDegrees | ofsDegr
             ofsDegr := (eDetectedBoard == REV_B) ? 45 : 53  ' 52-58 best (Verif)   B: 45, 48
         else
             ofsDegr := (eDetectedBoard == REV_B) ? 45 : 53
+'}
         fwdDegrees := 360 - ofsDegr                 ' 0 is bad > 2A!
         revDegrees := ofsDegr                       ' vs. using 360?
       other:
@@ -1004,7 +1000,7 @@ PRI setTargetAccel(nTgtIncr)
 
 PRI motorVoltage(eSelectedPower) : fVolts | index
     if (index := lookdown(eSelectedPower:PWR_6p0V..PWR_25p9V)) <> 0
-         fVolts := lookup(index: 6.0, 7.4, 11.1, 12.0, 14.8, 18.5, 22.2, 24.0, 25.9)
+        fVolts := lookup(index: 6.0, 7.4, 11.1, 12.0, 14.8, 18.5, 22.2, 24.0, 25.9)
     else
         debug("*???* Unknown: ", sdec_long(eSelectedPower))
         abort   ' SHOULD NEVER get here!
@@ -1382,6 +1378,15 @@ PRI max(a,b) : nMax
     nMax := (a > b) ? a : b
 
 PRI absDistanceInTics(newPos, priorPos) : nHallTics
+        '  -7 -> -9 = abs(-7 - -9) = abs(2) = 2
+        '  -11 -> -9 = abs(-11 - -9) = abs(-2) = 2
+        '  9 -> -9 = abs(9 - -9) + abs(18) = 18
+        ' -9 -> 6 = abs(-9 - 6) = abs(-15) = 15
+        ' -3 -> 6 = abs(-3 - 6) = abs(-9) = 9
+        ' 9 -> 6 = abs(9 - 6) = abs(3) = 3
+        ' 9 -> 12 = abs(9 - 12) = abs(-3) = 3
+    nHallTics := abs(priorPos - newPos)
+{
     if newPos == priorPos
         nHallTics := 0
     elseif newPos < 0
@@ -1403,6 +1408,7 @@ PRI absDistanceInTics(newPos, priorPos) : nHallTics
             ' 9 -> 6 = 6 - 9 = abs(-3) = 3
             ' 9 -> 12 = 12 - 9 = abs(3) = 3
             nHallTics := abs(newPos - priorPos)
+'}
 
 CON ' --- The Motor driver ---
 
@@ -1817,10 +1823,11 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 mov     fwdrev, #0                      ' just in case
                 mov     duty_, #duty_min_               ' just in case
                 mov     angle_, #0                      ' just in case
-                'call    #.initAngleFmHall               ' figure out where motor is once again
                 mov     drv_state_, #DCS_STOPPED        ' reset fault -> to stopped
                                                         ' drive_pins were floated when detect fault
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: are we floating pins during stop?
+    if_nz       call    #.initAngleFmHall               ' No, figure out where motor is before enabling drive pins
+                                                        ' stops jerk coming out of fault
     if_nz       dirh    drive_pins                      ' NO, set control pins back to output
                 ' if we were faulted, we are already stopped so just do nothing if new stop request
                 or      tgt_incr, tgt_incr          wz  ' Q: is stop request?
@@ -1917,6 +1924,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 subs    final_ramp, drv_incr
                 ' now are we moving FWD or REV?
                 testb   tgt_incr, #31               wc    ' Q: moving FWD or REV? (bCY=REV)
+.havefast1
     if_c        jmp     #.haveRUpRev                      ' YES, CY says go do REV
 .haveRUpFwd
                 cmps    final_ramp, curr_ramp         wc  ' Q: is delta larger than ramp
@@ -1953,9 +1961,11 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_nz       testb   tgt_incr, #31                   wc  ' NO, moving FWD or REV? (bCY=REV)
 .havefast
                 mov     curr_ramp, ramp_fast_               ' we want to ramp fast
-    if_c        jmp     #.haveRUpFwd                        ' jmp to previous ramping code
-.haveRDnFwd
-                jmp     #.haveRUpRev                        ' jmp to previous ramping code
+                modc    _nc                             wc  ' invert carry
+                jmp     #.havefast1                         ' jmp to previous ramping code
+'    if_c        jmp     #.haveRUpFwd                        ' jmp to previous ramping code
+'.haveRDnFwd
+'                jmp     #.haveRUpRev                        ' jmp to previous ramping code
 .endRDnAtTgt
                 ' AT TARGET now adjust state
                 or      tgt_incr, tgt_incr              wz  ' Q: was our target ZERO? (are we stopping?)
@@ -2212,8 +2222,8 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
 '---+-----------+---+---+---+-------------------+---+---+---+---+---+-----------+
 all_pins        LONG    (13 << 6) + 0           ' all-pins variable (0 addpins 13) needs ADD/OR of basepin, skip last 2 pwm pins, not used
-drive_pins      LONG    (5 << 6) + 8            ' !! should this be 5, since we only need 6 pins not 7?, drive-pins variable (+8 addpins 5) needs ADD of basepin
-adc_pins        LONG    (4 << 6) + 0            ' drive-pins variable (+0 addpins 4) needs ADD/OR of basepin, note total of 5 pins
+drive_pins      LONG    (5 << 6) + 8            ' drive-pins variable (+8 addpins 5) needs ADD of basepin, skip last 2 pwm pins, not used
+adc_pins        LONG    (4 << 6) + 0            ' drive-pins variable (+0 addpins 4) needs ADD/OR of basepin, note total of 5 pins, adc_x not used
 pwmt            LONG    %000_000000_01_01000_0  ' PWM true (P_BITDAC | P_PWM_TRIANGLE)
 pwmn            LONG    %001_000000_01_01000_0  ' PWM not (P_INVERT_OUTPUT | P_BITDAC | P_PWM_TRIANGLE)
 adc_fram        LONG    0                       ' set ADC to full PWM frame counts [was: LONG    FRAME]
