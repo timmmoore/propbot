@@ -361,10 +361,10 @@ PRI convertDistance(nValue, eDistanceUnits) : nDistanceInUnits | fMMpTick, fValu
                 nDistanceInUnits := trunc(float(nValue) *. fMMpTick /. 10.0)
             DDU_IN:
                 fValue := distConv.fMm2inFloat(float(nValue) *. fMMpTick)
-                nDistanceInUnits := trunc(fValue +. 0.5)    ' rounded
+                nDistanceInUnits := round(fValue)            '
             DDU_FT:
                 fValue := distConv.fMm2inFloat(float(nValue) *. fMMpTick)
-                nDistanceInUnits := trunc(fValue /. 12.0 +. 0.5)    ' in FT, rounded
+                nDistanceInUnits := round(fValue /. 12.0)    ' in FT
             DDU_M:
                 fValue := float(nValue) *. fMMpTick
                 nDistanceInUnits := trunc(fValue /. 1000.0)    ' in M
@@ -438,6 +438,8 @@ PRI getFaultStatus() : bLeftStatus, bRightStatus | bLeftSignal, bRightSignal
 
     if bLeftSignal == TRUE and ltFaultSeenMS == 0
         ltFaultSeenMS := getms() + 3000
+        if ltFaultSeenMS == 0
+          ltFaultSeenMS := 1
         debug(" -------------- LtMotr See FAULT! --------------")
     elseif bLeftSignal == TRUE and ltFaultSeenMS <> 0 and getms() > ltFaultSeenMS
         debug(" -------------- LtMotr Cleared FAULT --------------")
@@ -446,6 +448,8 @@ PRI getFaultStatus() : bLeftStatus, bRightStatus | bLeftSignal, bRightSignal
 
     if bRightSignal == TRUE and rtFaultSeenMS == 0
         rtFaultSeenMS := getms() + 3000
+        if rtFaultSeenMS == 0
+          rtFaultSeenMS := 1
         debug(" -------------- RtMotr See FAULT! --------------")
     elseif bRightSignal == TRUE and rtFaultSeenMS <> 0 and getms() > rtFaultSeenMS
         debug(" -------------- RtMotr Cleared FAULT --------------")
