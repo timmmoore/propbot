@@ -8,7 +8,7 @@
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started.... Feb 2022
 ''   Updated.... 21 Jul 2022
-''   Updated.... 26Aug-2Sep 2023 (timmoore)
+''   Updated.... 26-31Aug 2023 (timmoore)
 ''                              comment out Optical Rotary Encoder 360P/R on pin 48/49
 ''                              move pinbase validation code to before board detection
 ''                              move board detection before using it to config motor parameters
@@ -20,10 +20,12 @@
 ''                                  move check for stop_mode_ until after params have been loaded for first time,
 ''                                  and if brake mode call initAngleFmHall so motors do not jerk on startup
 ''                              fix jerk coming out of fault, call initAngleFmHall
+''   Updated.... 1-3Sep 2023 (timmoore)
 ''                              fix if stop_mode is changed while motor is stopped, drive_pin state is updated to match new stop_mode
 ''                              simpify absDistanceInTics
 ''                              fix multiple places where duty_ is initialized with #duty_min_ rather than duty_min_
 ''                                  and make sure first duty_ initialization is after params have been loaded for first time
+''   Updated.... 4 Sep 2023 (timmoore)
 ''                              fix current sense/watt output
 ''                                  sub gio from vio when calculating scaling factor
 ''                                  change output scale to account for periodic p_count_highs being used
@@ -1910,7 +1912,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 cmps    abs_incr, ramp_thresh       wc    ' Q: too early to ramp up fast?
     if_nc       mov     curr_ramp, ramp_fast_             ' NO, use fast ramp rate
     if_c        mov     curr_ramp, ramp_slo_              ' YES, use slow ramp rate
-                'abs     abs_incr, tgt_incr                ' get abs(tgt_incr)
                                                           ' calculate how far we are from desired
                 mov     final_ramp, tgt_incr              ' compute our delta from curr to target
                 subs    final_ramp, drv_incr
@@ -1952,7 +1953,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_nz       testbn  tgt_incr, #31                   wc  ' NO, moving FWD or REV? (bCY=FWD)
 .havefast
                 mov     curr_ramp, ramp_fast_               ' we want to ramp fast
-                'modc    _nc                             wc  ' invert carry (bCY=FWD)
                 jmp     #.havefast1                         ' jmp to previous ramping code
 .endRDnAtTgt
                 ' AT TARGET now adjust state

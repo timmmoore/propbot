@@ -23,6 +23,8 @@
 ''                                      gnd            48
 ''                                send battery voltage telemetry
 ''                              stop motors and shutdown if min battery reached
+''   Updated.... 4 Sept 2023 (timmoore)
+''                              force speed to 0 when joysticks are disabled
 ''
 '' =================================================================================================
 
