@@ -261,7 +261,8 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
                     wheels.driveDirection(rcSpeed, rcDirection)
                     priorDirection := rcDirection
                     priorSpeed := rcSpeed
-            elseif priorSpeed <> 0 and rcSpeed == 0
+            elseif priorSpeed <> 0
+                rcSpeed := 0
                 ' if we were running when motors control stopped then allow a stop when it happens
                 debug("- JOY (last) ", sdec_long(rcSpeed), sdec_long(rcDirection))
                 wheels.driveDirection(rcSpeed, rcDirection)
