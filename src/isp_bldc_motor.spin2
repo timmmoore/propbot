@@ -113,7 +113,6 @@ DAT { misc time constants }
     ' time constants based on CPU freq
     ticks1ms    LONG    0                     '
     ticks1us    LONG    0                     '
-    ticks10p23us  long    0                     '
     ticks500us  long    0                     ' 2 kHz
     ticks125ms  long    0                       ' 8 Hz
 
@@ -164,8 +163,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
 '' Specify motor control board connect location for this motor BUT DON'T start the driver
     ticks1ms   := (CLKFREQ / 1_000)
     ticks1us   := (CLKFREQ / 1_000_000)
-    ticks10p23us  := (ticks1ms * 1033) / 100_000
-    ticks500us := (ticks1ms * 500) / 1_000  ' phrased this way for better result
+    ticks500us := (ticks1ms * 500) / 1_000              ' phrased this way for better result
     ticks125ms := ticks1ms * 125
 
     ' set up debug variables
@@ -180,9 +178,9 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
 
     'bResetSenseData := FALSE
 
-    byte[@motorId] := 0 ' terminate an empty string
+    byte[@motorId] := 0                                 ' terminate an empty string
 
-    targetAngle := $FFFFFFFF    ' set to not used! (other values only used during testing)
+    targetAngle := $FFFFFFFF                            ' set to not used! (other values only used during testing)
 
     degrPerTic, hallTicsPerRotation := hallTicInfoForMotor()
 
@@ -210,15 +208,14 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     debug(" - Calc FRAME: ", udec(frame_cnt))
 
     ' preload driver values before driver start
-    adc_fram    :=    frame_cnt                   ' set ADC to full PWM frame counts
-    fram        :=    (frame_cnt / 2) << 16 + 1   ' PWM frame: width=FRAME/2, div sysclk by 1 (no division)
-    bias        :=    frame_cnt / 4               ' PWM center-frame bias
-    numerator   :=    3300 * adc_fram             ' calculate the adc scaling based off the adc_fram count
+    adc_fram    :=    frame_cnt                         ' set ADC to full PWM frame counts
+    fram        :=    (frame_cnt / 2) << 16 + 1         ' PWM frame: width=FRAME/2, div sysclk by 1 (no division)
+    bias        :=    frame_cnt / 4                     ' PWM center-frame bias
+    numerator   :=    3300 * adc_fram                   ' calculate the adc scaling based off the adc_fram count
 
     ' setup driver parameters based on clock rate
-    ' charge_time := ticks1us
-    dead_gap    := (ticks1us * 260) / 1_000 ' (was OFFSET) 260 of these made into "value nS"
-    pwm_limit   := (frame_cnt / 2) - (dead_gap  / 2)        'PWM duty hard limit 1/2 freq of PWM
+    dead_gap    := (ticks1us * 260) / 1_000             ' (was OFFSET) 260 of these made into "value nS"
+    pwm_limit   := (frame_cnt / 2) - (dead_gap  / 2)    'PWM duty hard limit 1/2 freq of PWM
 
     ' .. and set up rest
 
@@ -236,20 +233,19 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ' Chip'snew code adjusted this, why?
     '    duty_up     := 8   ' this drops our top-end power by 45%
     '    duty_dn     := 2
-    cfg_ctcks   := ticks500us               ' drive control loop period
-    motr_ctcks  := ticks10p23us             ' motor control loop period
-    stop_mode   := SM_FLOAT                 ' enum: [SM_FLOAT, SM_BRAKE]
+    cfg_ctcks   := ticks500us                           ' drive control loop period
+    stop_mode   := SM_FLOAT                             ' enum: [SM_FLOAT, SM_BRAKE]
     e_stop      := FALSE
     ' NOTES: 220410 -  at 18.5v 50_000 seems to fault a lot on gravel surface (i'm switching) to 40_000 and PWR_14p8V to see if motors stay operational
     ' NOTES: 220410 -  at 14.8V 40_000 seems to fault a lot on gravel surface (i'm switching) to 10_000 and PWR_14p8V to see if motors stay operational (5_000 dog slow)
     ' NOTES: 220413 -  at 14.8V 10_000 better on gravel surface  but too slow a ramp to 15_000 and PWR_14p8V to see if motors stay operational
     ' 50_000 for 12v & 18_5v
-    ramp_fast   := 50_000                   ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
-    ramp_slo    := 12_000                    ' 12k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
-    'ramp_fast   := 50_000                   ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
-    'ramp_slo    := 8_000                    ' 6.5 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
+    ramp_fast   := 50_000                               ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
+    ramp_slo    := 12_000                               ' 12k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
+    'ramp_fast   := 50_000                              ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
+    'ramp_slo    := 8_000                               ' 8k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
 
-    motorIsReversed := FALSE    ' by default our motor direction is not reversed
+    motorIsReversed := FALSE                            ' by default our motor direction is not reversed
     fault := FALSE
 
     ' init status variables
@@ -257,9 +253,9 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     minDrvTics := 65535
     drv_state := DCS_Unknown
 
-    maxSpeed := 75            ' [1-100] default 75
+    maxSpeed := 75                                      ' [1-100] default 75
 {
-    maxSpeed4dist := 75      ' [1-100] default 75
+    maxSpeed4dist := 75                                 ' [1-100] default 75
 
     ' preset HDMI Monitor values
     tvMaxMmPerSec_x10 := 0
@@ -268,10 +264,10 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     tvMaxkPH_x10 := 0
 '}
 
-    eUserSelectedVolts := VALUE_NOT_SET    ' ensure we don't drive motor unles we know the users' voltage!
+    eUserSelectedVolts := VALUE_NOT_SET                 ' ensure we don't drive motor unles we know the users' voltage!
 
     debug("* init values ", udec_long(dead_gap), udec_long(pwm_limit), udec_long(adc_fram), udec_long(duty_min), udec_long(duty_max))
-    debug("*      values ", udec_long(duty_up), udec_long(duty_dn), udec_long(cfg_ctcks), udec_long(motr_ctcks))
+    debug("*      values ", udec_long(duty_up), udec_long(duty_dn), udec_long(cfg_ctcks)) ', udec_long(motr_ctcks))
 
 {
     circInMM_x10 := distConv.circInMMforDiaInInchFloat(user.WHEEL_DIA_IN_INCH)
@@ -817,23 +813,22 @@ CON ' --- PRIVATE (Utility) Methods ---
 PRI map(inValue, inMin, inMax, outMin, outMax) : nResult | slope
 ' Maps inValue in range inMin..inMax to new value in range outMin..outMax
     nResult := 0
-    if inValue <> 0
-        if (inValue > 0)
-            ' treat positive values out-of-bounds
-            if (inValue <= inMin)
-                nResult := outMin
-            elseif (inValue >= inMax)
-                nResult :=  outMax
-        elseif (inValue < 0)
-            ' treat negative values out-of-bounds
-            if (inValue >= inMin)
-                nResult := outMin
-            elseif (inValue <= inMax)
-                nResult :=  outMax
-        ' NOT  out-of-bounds, so scale the inValue
-        if nResult == 0
-            slope := (outMax - outMin) / (inMax - inMin)
-            nResult := outMin + slope * (inValue - inMin)
+    if (inValue > 0)
+        ' treat positive values out-of-bounds
+        if (inValue <= inMin)
+            nResult := outMin
+        elseif (inValue >= inMax)
+            nResult :=  outMax
+    elseif (inValue < 0)
+        ' treat negative values out-of-bounds
+        if (inValue >= inMin)
+            nResult := outMin
+        elseif (inValue <= inMax)
+            nResult :=  outMax
+    ' NOT  out-of-bounds, so scale the inValue
+    if inValue <> 0 and nResult == 0
+        slope := (outMax - outMin) / (inMax - inMin)
+        nResult := outMin + slope * (inValue - inMin)
     'debug("- map() ", sdec_long(inValue - inMin), sdec_long(inMin) , sdec_long(inMax), sdec_long(inMax - inMin))
     'debug("-       ", sdec_long(slope), sdec_long(outMin) , sdec_long(outMax), sdec_long(outMax - outMin))
     'debug("- map() ", sdec_long(inValue) , " --> ", sdec_long(nResult))
@@ -1599,7 +1594,6 @@ VAR  {  Motor Parameters  }
     LONG    ramp_slo        ' subtract this every 500 uSec to ramp down to slower speed
 
 ' -----------------------------------
-    'LONG    charge_time     ' delay between driving h/l side of driver (never drive both at once)
     LONG    frame_cnt       ' clock-tics for period of PWM_RATE_IN_HZ
 
 DAT  {  Motor DRIVER  }
@@ -2194,7 +2188,7 @@ adc_fram        LONG    0                       ' set ADC to full PWM frame coun
 fram            LONG    0                       ' PWM frame: width=FRAME/2, div sysclk by 1 (no division) [was: LONG (FRAME / 2) << 16 + 1 ]
 bias            LONG    0                       ' PWM center-frame bias [was: LONG    FRAME / 4]
 third           LONG    1 FRAC 3                ' 120 degrees
-numerator       LONG    3300 << 11              ' numerator for ADC calculations, configured from init to match the adc_fram
+numerator       LONG    3300 << 11              ' numerator for ADC calculations, configured from init to match the adc_fram coutn rather than 1 << 11
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
 maxPos          LONG    $7FFF_FFFF              ' max positive signed value
 ramp_thresh     LONG    25_000_000              ' fm zero - slow ramp to here then fast ramp ( ~1/5 of 0-max )
@@ -2346,8 +2340,8 @@ duty_dn_    res 1
 dead_gap_   res 1               ' this was OFFSET but now passed into driver
 pwm_limit_  res 1               ' this was PWMLIM but now passed into driver
 cfg_ctcks_  res 1
-motr_ctcks_ res 1
-stop_mode_  res 1
+motr_ctcks_ res 1               ' not used
+stop_mode_  res 1               ' float or brake mode
 e_stop_     res 1               ' T/F where T means stopal motor function
 ramp_fast_  res 1               ' angle increment: add this every 500 uSec to ramp up to speed
 ramp_slo_   res 1               ' angle decrement: subtract this every 500 uSec to ramp down to slower speed
