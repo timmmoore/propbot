@@ -25,6 +25,7 @@
 ''                              stop motors and shutdown if min battery reached
 ''   Updated.... 4 Sept 2023 (timmoore)
 ''                              force speed to 0 when joysticks are disabled
+''                              add deadband to speed, if very slow bot jerks, so have a minimum speed
 ''
 '' =================================================================================================
 
@@ -58,6 +59,9 @@ CON { fixed io pins }
   BATTERY_DIVIDER               = 1232.0                        ' value that makes reading match meter, battery max is 4.2V per cell (total 22.2V)
   BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
   BATTERY_STOP                  = true                          ' shutdown if min battery reached
+
+  DEADBAND                      = 8                             ' ignore speed lower than this
+  MOTOROFFONIGNOREJOYSTICK      = true
 
 OBJ { our Drive Subsystem }
 
@@ -182,7 +186,7 @@ VAR
     long    bLastIgnoreJoyStks
     long    bLastShowDriveStates
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,} bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,} bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -245,31 +249,35 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
                     debug("  Motor Enabled")
                 else
                     debug("  Motor Disabled")
+                    finalupdate := true
             bLastEmerCutoff := bEmerCutoff
 
         if not bShowDebugStatus and bLastIgnoreJoyStks <> bIgnoreJoySticks
             if bIgnoreJoySticks
                 debug("  Motor CTL OFF")
+                finalupdate := true
             else
                 debug("  Motor CTL enabled")
             bLastIgnoreJoyStks := bIgnoreJoySticks
 
         if not bEmerCutoff
             rcSpeed, rcDirection := updPosnBothJoy()
-            rcDirection := -rcDirection                                      ' invert this to apply to our motors
+            rcDirection := -rcDirection                                         ' invert this to apply to our motors
             ifnot bIgnoreJoySticks
                 if priorDirection <> rcDirection or priorSpeed <> rcSpeed
                     debug("- JOY ", sdec_long(rcSpeed), sdec_long(rcDirection))
                     wheels.driveDirection(rcSpeed, rcDirection)
                     priorDirection := rcDirection
                     priorSpeed := rcSpeed
-            elseif priorSpeed <> 0
-                rcSpeed := 0
+            elseif finalupdate                                                  ' make sure we do a final speed/direction update on disable joystick
+                if MOTOROFFONIGNOREJOYSTICK                                     ' depending on whether want to stop if disable joystick
+                    rcSpeed := 0
                 ' if we were running when motors control stopped then allow a stop when it happens
                 debug("- JOY (last) ", sdec_long(rcSpeed), sdec_long(rcDirection))
                 wheels.driveDirection(rcSpeed, rcDirection)
                 priorDirection := rcDirection
                 priorSpeed := rcSpeed
+                finalupdate := false
 
         telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
         telemetry.setcurrent(nLtAmps, nRtAmps)
@@ -295,6 +303,8 @@ PRI updPosnBothJoy(): speed, direction | rawSpeed, rawDirection, rngMin, rngMax
     rawSpeed := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_VT)
     rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_VT)
     speed := map(rawSpeed, rngMin, rngMax, -100, +100)
+    if abs(speed) < DEADBAND
+      speed := 0
 
     ' route Lt Joystick Hz (spring center) to direction
     rawDirection := remoteCtl.readChannel(remoteCtl.CTL_LT_JOY_HZ)
