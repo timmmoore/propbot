@@ -213,6 +213,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     adc_fram    :=    frame_cnt                   ' set ADC to full PWM frame counts
     fram        :=    (frame_cnt / 2) << 16 + 1   ' PWM frame: width=FRAME/2, div sysclk by 1 (no division)
     bias        :=    frame_cnt / 4               ' PWM center-frame bias
+    numerator   :=    3300 * adc_fram             ' calculate the adc scaling based off the adc_fram count
 
     ' setup driver parameters based on clock rate
     ' charge_time := ticks1us
@@ -571,7 +572,7 @@ PUB getCurrent() : fAmps, fWatts
     ' RevB. 10A, through 0,003R -> 0.03mV -> (50gain) -> 1.5V. 20A -> 3V, 10A -> 1.5V, 1A -> 0.15V
     ' RevA. 10A, through 0.005R -> 0.05mV -> (1gain) -> 50mW, 20A -> 0.1V, 10A -> 50mV, 1A -> 5mV
     ' however, adc isn't in standard adc but in p_count_highs with a period, so scaling needed by SCALE_AMPS
-    fAmps := (sense_i_mV * SCALE_AMPS)/rSenseForBoard                           ' in multiples of 0.1mA
+    fAmps := sense_i_mV/rSenseForBoard                                          ' in multiples of 0.1mA
     fWatts := round((float(fAmps) *. fMotorVolts)/. F_SCALE_WATTS)              ' in mW
 
 PUB getMaxSpeed() : nSpeed
@@ -999,7 +1000,7 @@ PRI confgurePowerLimits(userVoltage) | selectedPower, index
     if maxFwdIncreAtPwr <> VALUE_NOT_SET                ' if we have good motor then set rest of values
         eUserSelectedVolts := selectedPower
         fMotorVolts := motorVoltage(selectedPower)
-        minFwdIncreAtPwr := 544_628*20                  ' anything below yields NO rotation
+        minFwdIncreAtPwr := 544_628                     ' anything below yields NO rotation
         minRevIncreAtPwr := 0 - minFwdIncreAtPwr
     debug("* EXIT 2 CFG ", sdec_long(eUserSelectedVolts), " ", sdec(maxFwdIncreAtPwr), " ", sdec(minFwdIncreAtPwr))
 
@@ -1187,13 +1188,7 @@ CON ' -- TASK: position tracking --
 '  R360_WINDOW_SIZE = 5
 '  HALL_WINDOW_SIZE = SENSE_LOOP_HZ
 
-    ' shift 4 digits to left of decimal
-  F_SCALE_AMPS = 3.0 '1_000.0
-  SCALE_AMPS = 3 '1_000
-    ' shift 3 digits to left of decimal
-  F_SCALE_WATTS = 10.0 '1_000.0
-  SCALE_WATTS = 10 '1_000
-
+  F_SCALE_WATTS = 10.0
   F_REV_A_RSENSE = 5        ' .005 Ohms
   F_REV_B_RSENSE = 3*50     ' .003 Ohms * gain 50 from INA180B2
 
@@ -1363,8 +1358,8 @@ PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
 
     tvMaxSenseI := max(sense_i_mV, tvMaxSenseI)
     ' power calcs
-    tv_mA := (sense_i_mV * SCALE_AMPS)/ rSenseForBoard
-    tv_mW :=  round(float(tv_mA) *. fMotorVolts *. (F_SCALE_WATTS/.F_SCALE_AMPS)) ' * SCALE is give me 3 digits to right of decimal
+    tv_mA := sense_i_mV/rSenseForBoard)                                         ' in multiples of 0.1mA
+    tv_mW := round((float(tv_mA) *. fMotorVolts)/. F_SCALE_WATTS)               ' in mW
 
     if user.MOTOR_TYPE == MOTR_6_5_INCH
         ' pos is in hall-steps of 4Degr each.
@@ -1730,12 +1725,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_nz       dirh    drive_pins                      ' NO, set control pins back to output
     if_z        dirl    drive_pins                      ' Yes, float drive pins
 
-                ' reset timer (schedule next control time)
- '               getct   ctrlEndTix                      ' get now
- '               addct1  ctrlEndTix, cfg_ctcks_          '   add in next time we need to run
-                ' start driver
-'                jmp     #.drvMotor
-    ' -------------------------------------------------------------------------
     ' =========================================================================
     '  MOTOR DRIVE LOOP - runs at 2.0 kHz (500.0 uSec period)
     '       time to adjust angle...
@@ -1767,7 +1756,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 rdlong  tgt_incr, ptra[-1]                  ' get rate of increment ( +/- drive power, or 0 stop)
                 or      tgt_incr, tgt_incr          wz      ' Q: being asked to stop?
     if_nz       jmp     #.notRqStop                         ' NO, not exception, check next
-                ' this is a stop request
+                                                            ' this is a stop request
                 cmp     drv_state_, #DCS_STOPPED    wz      ' Q: are we already stopped?
     if_nz       jmp     #.newRqst                           ' NO, not stopped, go do stop!
                 cmp     curr_stop, stop_mode_       wz      ' stopped, see if stop mode has changed and update drive_pin state
@@ -1782,16 +1771,15 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 .notRqStop
                 cmp     sv_tgt_incr, tgt_incr       wz      ' Q: do we have a new request?
     if_z        jmp     #.currRqst                          ' NO, same as last, just continue what we are doing
-
-                ' Accept a new drive command only when NOT in middle of change
+                                                            ' Accept a new drive command only when NOT in middle of change
                 cmp     drv_state_, #DCS_STOPPED    wz      ' Q: STOPPED not doing anything?
     if_nz       cmp     drv_state_, #DCS_AT_SPEED   wz      ' Q: AT_SPEED not doing anything?
     if_nz       cmp     drv_state_, #DCS_FAULTED    wz      ' Q: FAULTED not doing anything?
     if_nz       mov     tgt_incr, sv_tgt_incr               ' BUSY, throw away this request this request
     if_nz       jmp     #.currRqst                          ' BUSY, ignore command, continue same command
-                ' NOT BUSY, fall through to process new request...
-
+                                                            ' NOT BUSY, fall through to process new request...
 .newCmd
+{
 ' -------------------------------------------------------------------------
 '  TEST-EXERCISER SUPPORT CODE (alternate input path (angle) for TESTing!)
                 rdlong  tmp_angle_, ptra[-2]            ' get desired targetAngle for test (tgt_incr is temp variable in this case)
@@ -1802,7 +1790,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 ' NO? then just fall thru
 '  END OF TEST-EXERCISER SUPPORT CODE
 ' -------------------------------------------------------------------------
-
+'}
 
     ' =========================================================================
 .newRqst    ' have new request
@@ -1858,11 +1846,8 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 '    - to larger - -> ramp up to new
                 '    - to smaller - -> ramp down to new
 
-'                or      prior_incr, prior_incr      wz  ' were we stopping but haven't yet?
-'    if_nz       jmp     #.notInStop
                 ' yes we were stopping and haven't yet stopped, so just do speed change
                 ' (we are currently at drv_incr but need to head for tgt_incr instead)
-
 .notInStop
                 ' first do we have same sign?
                 testb   drv_incr, #31               wc    ' find dual '-' signs (CY=both nega)
@@ -1886,7 +1871,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 ' let's change direction
                 mov     drv_state_, #DCS_SLOW_TO_CHG
                 jmp     #.slow2Chg
-
 
     ' ====================================
 .currRqst       ' No new request, continue with
@@ -2031,13 +2015,11 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 .ctlMotor
                 jmp     #.loop                      ' main loop
 
-'}
-
-'{
     ' =========================================================================
     ' this - special DRIVE TEST CODE
     ' =========================================================================
-        ' =========================================================================
+    ' =========================================================================
+'}
 .ctlMotor
 
 
@@ -2046,7 +2028,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     '       keep our error rate low...
     ' -------------------------------------------------------------------------
                 getct   drvrSrtTix                  ' remember when we started this loop
-                'addct2  drvrSrtTix, motr_ctcks_    '   add in next time we need to run
 
                 call    #.wait4adc                  ' allow ADC rest period (wait for sample ready)
                 rdpin   sense_u_, pin_adc_u_i       ' pin samples done, read them
@@ -2172,12 +2153,8 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 setq    #DRVR_STATUS_LONGS_COUNT-1  ' write drive[3]/sense[4]/hall/pos/duty/err/ticks[2]/state to hub
                 wrlong  drive_u_, ptra
                 ' wait for rest of time here...
-'.motWtLp
-'                jnct2   #.motWtLp                   ' wait until delay expires
 .loop           jnct1   #.ctlMotor                  ' if not time for control loop just go to drive loop
                 jmp     #.drvMotor
-
-'}
 
     ' =========================================================================
     '  PRIVATE (Utiility) Subroutines
@@ -2217,7 +2194,7 @@ adc_fram        LONG    0                       ' set ADC to full PWM frame coun
 fram            LONG    0                       ' PWM frame: width=FRAME/2, div sysclk by 1 (no division) [was: LONG (FRAME / 2) << 16 + 1 ]
 bias            LONG    0                       ' PWM center-frame bias [was: LONG    FRAME / 4]
 third           LONG    1 FRAC 3                ' 120 degrees
-numerator       LONG    3300 << 11              ' numerator for ADC calculations
+numerator       LONG    3300 << 11              ' numerator for ADC calculations, configured from init to match the adc_fram
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
 maxPos          LONG    $7FFF_FFFF              ' max positive signed value
 ramp_thresh     LONG    25_000_000              ' fm zero - slow ramp to here then fast ramp ( ~1/5 of 0-max )
