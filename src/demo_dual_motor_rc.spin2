@@ -110,7 +110,7 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
         debug("* Set up - remote control")
 
         battery.start(BATTERY_ANALOG, BATTERY_LOW, BATTERY_HIGH)
-        remoteCog := remoteCtl.start(SBUS_RX)
+        remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
         statusOK := remoteCog <> 0 ? TRUE : FALSE
         status1Ok := telemetryCog <> 0 ? TRUE : FALSE
@@ -235,7 +235,8 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
         'debug("  ltA=", sdec_long_(nLtAmps), ", rtA=", sdec_long_(nRtAmps))
         if bShowState <> bLastShowState
             if bShowState
-                debug("  ltA=", sdec_long_(nLtAmps), ", rtA=", sdec_long_(nRtAmps))
+                debug("  ltmA=", sdec_(nLtAmps/10), ".", sdec_(nLtAmps//10), ", rtmA=", sdec_(nRtAmps/10), ".", sdec_(nRtAmps//10))
+                debug("  ltmW=", sdec_(nLtWatts), ", rtmW=", sdec_(nRtWatts))
             bLastShowState := bShowState
 
         if bEmerCutoff <> bLastEmerCutoff
@@ -342,6 +343,12 @@ PRI map(inValue,  inMin,  inMax,  outMin,  outMax) : outValue
     else
         outValue := (inValue - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
 
+DAT
+'' rc transmitter configuration
+    ctlMinValue     word    0,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172
+    ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810
+    validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CTL_NADA
+    valid3Ways      byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CTL_NADA
 
 CON { license }
 {{
