@@ -100,9 +100,6 @@ OBJ { our Motors }
     user        :   "isp_bldc_motor_userconfig"         ' driver configuration
     distConv    :   "isp_dist_utils"                    ' distance conversion utils
 
-DAT
-  cogmask     LONG      0
-
 PUB null()
 
 '' This is not a top-level object
@@ -162,7 +159,7 @@ PUB stop()
 
 
 PUB setAcceleration(rate)
-'' NOT WORKING: Limit Acceleration to {rate} where {rate} is [??? - ???] mm/s squared (default is ??? mm/s squared)
+'' Updates the ramping speed of the motors
     ltWheel.setAcceleration(rate)
     rtWheel.setAcceleration(rate)
 
@@ -205,12 +202,9 @@ PUB driveDirection(power, direction) | ltPower, rtPower
     ' calculate effective power based on direction
     rqstPower := power
     rqstDirection := direction
-    rqstLtPower, rqstRtPower := calcPowerForDirection(power, direction)
+    ltPower, rtPower := calcPowerForDirection(power, direction)
 
-    ' now tell our motor of their own power
-    ltWheel.driveAtPowerEx(rqstLtPower, true)
-    rtWheel.driveAtPowerEx(rqstRtPower, true)
-    cogatn(cogmask)                                     ' sync the 2 motor cogs
+    driveAtPower(ltPower, rtPower)
 
 {
 PUB driveForDistance(leftDistance, rightDistance, eDistanceUnits)
@@ -598,6 +592,9 @@ VAR { Data for Motor Position Tracking }
     long    rqstRtPower
     long    userCutoff
 
+    ' bitmask of motor cogs, used to sync updated to the 2 motors
+    long    cogmask
+
     long    notUsed
 
 PRI resetLtWindowAccumulator()
@@ -792,8 +789,8 @@ DAT { debug strings }
     priorRtStatus   LONG    -1
     priorLtState    LONG    -1
     priorRtState    LONG    -1
-    priorLtFault   LONG    -3
-    priorRtFault   LONG    -3
+    priorLtFault    LONG    -3
+    priorRtFault    LONG    -3
 
 
 PRI showDriverState(eState, pMsg)
