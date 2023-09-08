@@ -2157,7 +2157,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     '  PRIVATE (Utiility) Subroutines
     ' -------------------------------------------------------------------------
 .driveon
-    _ret_       dirh    drive_pins                      ' just pwm outputs are enabled
+'    _ret_       dirh    drive_pins                      ' just pwm outputs are enabled
                                                         ' comment previous line if want to use the following for enabling pwm output
                 dirl    all_pins                        ' make sure to disable both ADC and PWM pins
                 wypin   #0, drive_pins                  ' make sure pwm is off
