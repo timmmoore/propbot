@@ -1894,14 +1894,8 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_z        jmp     #.endRUpAtSpeed                   ' YES, (Matched) go mark done
                                                           ' do next UP adjustment or set at-speed
                 abs     abs_incr, drv_incr                ' get abs(drv_incr)
-'                cmps    abs_incr, ramp_thresh       wc    ' Q: too early to ramp up fast?
-'    if_nc       mov     curr_ramp, ramp_max_              ' NO, use fast ramp rate
-'    if_c        mov     curr_ramp, ramp_min_              ' YES, use slow ramp rate
                 mov     curr_ramp, ramp_curr              ' current ramp
-                sub     ramp_curr, ramp_min_         wz   ' to calculate next inc, remove min
-     if_z       add     ramp_curr, ramp_inc_              ' first time add inc
-     if_nz      add     ramp_curr, ramp_curr              ' else double current ramp
-                add     ramp_curr, ramp_min_              ' add min back
+                add     ramp_curr, ramp_inc_              ' add min back
                 cmps    ramp_curr, ramp_max_         wc   ' too high?
      if_nc      mov     ramp_curr, ramp_max_              ' Y set to ramp_max
                                                           ' calculate how far we are from desired
