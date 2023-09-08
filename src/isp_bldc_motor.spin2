@@ -29,6 +29,10 @@
 ''                              fix current sense/watt output
 ''                                  sub gio from vio when calculating scaling factor
 ''                                  change output scale to account for periodic p_count_highs being used
+''   Updated.... 8 Sep 2023 (timmoore)
+''                              allow sync of motor cog, start and change of speed
+''                              change ramping code to be continuous increment from a min to max
+''                              setacceleration can change the ramp increment
 ''
 '' =================================================================================================
 
@@ -121,15 +125,15 @@ PUB null()
 '' This is not a top-level object
 
 PUB start(eMotorBasePin, eMotorVoltage, eDetectionMode) : ok
-    ok := starttx(eMotorBasePin, eMotorVoltage, eDetectionMode, false)
+    ok := startEx(eMotorBasePin, eMotorVoltage, eDetectionMode, false)
 
-PUB starttx(eMotorBasePin, eMotorVoltage, eDetectionMode, sync) : ok | legalBase
+PUB startEx(eMotorBasePin, eMotorVoltage, eDetectionMode, sync) : ok | legalBase
 '' Specify motor control board connect location for this motor and start the driver
     ' setup runtime constants
     sync_required := sync
     init(eMotorBasePin, eMotorVoltage, eDetectionMode)
     params_ptr := @offset_fwd   ' point to driver variables
-    setTargetAccel(0)           ' do NOT move at startup
+    setTargetAccel(0, false)    ' do NOT move at startup
 
     ok := motorCog := coginit(NEWCOG, @driver, @pinbase) + 1
     if motorCog == 0    ' did fail?
@@ -244,15 +248,15 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ' NOTES: 220410 -  at 14.8V 40_000 seems to fault a lot on gravel surface (i'm switching) to 10_000 and PWR_14p8V to see if motors stay operational (5_000 dog slow)
     ' NOTES: 220413 -  at 14.8V 10_000 better on gravel surface  but too slow a ramp to 15_000 and PWR_14p8V to see if motors stay operational
     ' 50_000 for 12v & 18_5v
-    ramp_max := 50_000                    ' 50k angle increment/decrement: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
-    ramp_min := 5_000                     ' 5k angle increment: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
-    ramp_inc := 22                        ' initial increment to ramping speed, added to ramp_min every 500us until ramp_max reached
-    ramp_down := 50_000                   ' fixed ramp down speed
     '   ramp_min - start ramping at this value
     '   ramp_max - max ramping at this value, once reach this value, keep incrementing with this value
-    '   ramp_inc - ramping increment, added to ramp_curr each time ramp_curr is used. Effectively defines the acceleration
-    '   ramp_curr - current ramping increment, starts at ramp_min, ramp_inc is added everytime it is used during spin_up until reach ramp_max
-    motorIsReversed := FALSE                            ' by default our motor direction is not reversed
+    '   ramp_inc - ramping increment, added to ramp_min every 500us. Effectively defines the acceleration
+    ramp_max := 50_000                    ' 50k angle increment/decrement: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
+    ramp_min := 1_500                     ' 1k5 angle increment: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
+    ramp_inc := 22                        ' initial increment to ramping speed, added to ramp_min every 500us until ramp_max reached
+    ramp_down := 50_000                   ' fixed ramp down speed
+
+    motorIsReversed := FALSE              ' by default our motor direction is not reversed
     fault := FALSE
 
     ' init status variables
@@ -397,7 +401,10 @@ PUB driveForDistance(distance, distanceUnits)
     driveAtPower(maxSpeed4dist)
 '}
 
-PUB driveAtPower(power) | limitPwr, motorIncre, correctedPower
+PUB driveAtPower(power)
+  driveAtPowerEx(power, false)
+
+PUB driveAtPowerEx(power, sync) | limitPwr, motorIncre, correctedPower
 '' Control the speed and direction of this motor using the {power, [(-100) to 100]} input.
 '' Turns the motor on at {power}.
 '' AFFECTED BY:  setAcceleration(), setMaxSpeed(), holdAtStop()
@@ -408,7 +415,7 @@ PUB driveAtPower(power) | limitPwr, motorIncre, correctedPower
     motorPower := limitPwr := -maxSpeed #> limitPwr <# maxSpeed
     correctedPower := (motorIsReversed) ? 0 - limitPwr : limitPwr
     motorIncre := incrementForPower(correctedPower)
-    setTargetAccel(motorIncre)
+    setTargetAccel(motorIncre, sync)
     'debug("-MOT- driveAtPower() EXIT ")
 
 {
@@ -498,12 +505,12 @@ PUB stopAfterTime(nTime, eTimeUnits) | timeNow
 PUB stopMotor()
 '' Stops the motor, killing any motion that was still in progress
 ''  AFFECTED BY:holdAtStop()
-    setTargetAccel(0)
+    setTargetAccel(0, false)
 
 PUB emergencyCutoff()
 '' EMERGENCY-Stop - Immediately stop motor, killing any motion that was still in progress
     e_stop := TRUE
-    setTargetAccel(0)
+    setTargetAccel(0, false)
     debug("-- EMERGENCY STOP --")
 
 PUB clearEmergency()
@@ -1008,8 +1015,10 @@ PRI confgurePowerLimits(userVoltage) | selectedPower, index
         minRevIncreAtPwr := 0 - minFwdIncreAtPwr
     debug("* EXIT 2 CFG ", sdec_long(eUserSelectedVolts), " ", sdec(maxFwdIncreAtPwr), " ", sdec(minFwdIncreAtPwr))
 
-PRI setTargetAccel(nTgtIncr)
+PRI setTargetAccel(nTgtIncr, sync)
     ' these only impact ramping up, ramp_down speed is not impacted
+    if sync
+        waitatn()                                       ' waiting for caller to send atn, sync updates to multiple motors
     targetIncre := nTgtIncr
     debug("-MOT- ", sdec_long(targetIncre), " ", sdec_long(ramp_max), " ", sdec_long(ramp_min))
     'tvTargetIncreInM := nTgtIncr / 10_000
@@ -2157,10 +2166,10 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     '  PRIVATE (Utiility) Subroutines
     ' -------------------------------------------------------------------------
 .driveon
-'    _ret_       dirh    drive_pins                      ' just pwm outputs are enabled
+    _ret_       dirh    drive_pins                      ' just pwm outputs are enabled
                                                         ' comment previous line if want to use the following for enabling pwm output
-                dirl    all_pins                        ' make sure to disable both ADC and PWM pins
-                wypin   #0, drive_pins                  ' make sure pwm is off
+'                dirl    all_pins                        ' make sure to disable both ADC and PWM pins
+'                wypin   #0, drive_pins                  ' make sure pwm is off
 .driveall
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
                 dirl    pin_hall_u                      ' make sure HALL pins are inputs
@@ -2380,7 +2389,7 @@ drv_state_  res 1       ' enum: DCS_STOPPED, DCS_SPIN_UP, DCS_AT_SPEED, DCS_SPIN
 ' fault is here... (but external only)
 
 ' $1f8 for reg cogs
-    fit     496  ' 453 currently works
+    fit     496  ' 451 currently works
 
 CON { license }
 {{
