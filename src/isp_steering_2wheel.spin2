@@ -157,12 +157,11 @@ PUB stop()
     ltWheel.stop()
     rtWheel.stop()
 
-{
+
 PUB setAcceleration(rate)
 '' NOT WORKING: Limit Acceleration to {rate} where {rate} is [??? - ???] mm/s squared (default is ??? mm/s squared)
     ltWheel.setAcceleration(rate)
     rtWheel.setAcceleration(rate)
-'}
 
 PUB setMaxSpeed(speed)
 '' Limit top-speed to {speed}
