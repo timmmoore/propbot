@@ -221,18 +221,18 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
 
     ' orig higher power code used this
     duty_min    := 100 << 4 #> (dead_gap / 2) << 4
-    '    duty_min    := dead_gap << 4 #> dead_gap << 4
-    ' Chip's new code adjusted this, why?
-    '    duty_min    := 200 << 4 #> dead_gap << 4
+                                                        '    duty_min    := dead_gap << 4 #> dead_gap << 4
+                                                        ' Chip's new code adjusted this, why?
+                                                        '    duty_min    := 200 << 4 #> dead_gap << 4
     duty_max    := (pwm_limit  << 4) / 2 <# pwm_limit << 4      ' ok
-    'duty_max    := ((pwm_limit  << 4) / 4) * 3 <# pwm_limit << 4    ' BAD
-    'duty_max    := ((pwm_limit  << 4) / 8) * 5 <# pwm_limit << 4    ' BAD
+                                                        'duty_max    := ((pwm_limit  << 4) / 4) * 3 <# pwm_limit << 4    ' BAD
+                                                        'duty_max    := ((pwm_limit  << 4) / 8) * 5 <# pwm_limit << 4    ' BAD
     ' orig higher power code used this
     duty_up     := 18
     duty_dn     := 4
-    ' Chip's new code adjusted this, why?
-    '    duty_up     := 8   ' this drops our top-end power by 45%
-    '    duty_dn     := 2
+                                                        ' Chip's new code adjusted this, why?
+                                                        '    duty_up     := 8   ' this drops our top-end power by 45%
+                                                        '    duty_dn     := 2
     cfg_ctcks   := ticks500us                           ' drive control loop period
     stop_mode   := SM_FLOAT                             ' enum: [SM_FLOAT, SM_BRAKE]
     e_stop      := FALSE
@@ -240,12 +240,14 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ' NOTES: 220410 -  at 14.8V 40_000 seems to fault a lot on gravel surface (i'm switching) to 10_000 and PWR_14p8V to see if motors stay operational (5_000 dog slow)
     ' NOTES: 220413 -  at 14.8V 10_000 better on gravel surface  but too slow a ramp to 15_000 and PWR_14p8V to see if motors stay operational
     ' 50_000 for 12v & 18_5v
-    framp_fast := ramp_down := ramp_fast := 50_000      ' 50k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
-    framp_slow := ramp_slo := 12_000                    ' 12k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
-    sramp_fast := 5_000                                 ' 5k angle increment: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
-    sramp_slow := 5_000                                 ' 5k angle decrement: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
-    ramp_threshold := 20_000_000                        ' threshold to switch between the 2 sets of ramping speeds
-
+    ramp_max := 50_000                    ' 50k angle increment/decrement: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
+    ramp_min := 5_000                     ' 5k angle increment: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
+    ramp_inc := 22                        ' initial increment to ramping speed, added to ramp_min every 500us until ramp_max reached
+    ramp_down := 50_000                   ' fixed ramp down speed
+    '   ramp_min - start ramping at this value
+    '   ramp_max - max ramping at this value, once reach this value, keep incrementing with this value
+    '   ramp_inc - ramping increment, added to ramp_curr each time ramp_curr is used. Effectively defines the acceleration
+    '   ramp_curr - current ramping increment, starts at ramp_min, ramp_inc is added everytime it is used during spin_up until reach ramp_max
     motorIsReversed := FALSE                            ' by default our motor direction is not reversed
     fault := FALSE
 
@@ -268,7 +270,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     eUserSelectedVolts := VALUE_NOT_SET                 ' ensure we don't drive motor unles we know the users' voltage!
 
     debug("* init values ", udec_long(dead_gap), udec_long(pwm_limit), udec_long(adc_fram), udec_long(duty_min), udec_long(duty_max))
-    debug("*      values ", udec_long(duty_up), udec_long(duty_dn), udec_long(cfg_ctcks)) ', udec_long(motr_ctcks))
+    debug("*      values ", udec_long(duty_up), udec_long(duty_dn), udec_long(cfg_ctcks))
 
 {
     circInMM_x10 := distConv.circInMMforDiaInInchFloat(user.WHEEL_DIA_IN_INCH)
@@ -306,26 +308,21 @@ VAR { * user request values * }
     LONG    maxFwdIncreAtPwr
     LONG    minRevIncreAtPwr
     LONG    maxRevIncreAtPwr
-    ' fast and slow ramp speeds
-    LONG    framp_fast
-    LONG    framp_slow
-    LONG    sramp_fast
-    LONG    sramp_slow
-    LONG    ramp_threshold
     ' user max speeds
     LONG    maxSpeed            ' [1-100] default 75
 {
     LONG    maxSpeed4dist       ' [1-100] default 75
     ' stop point in time based on passing mSec or tick counts
     LONG    motorStopMSecs      ' stop motor when we've passed this time in milliseconds
-    'LONG    motorStopHallTicks  ' stop motor when we've passed this tick count
+    LONG    motorStopHallTicks  ' stop motor when we've passed this tick count
 }
     LONG    motorPower          ' remember last power requested
     LONG    motorIsReversed     ' T/F where T means we need to flip direction: FWD <-> REV
     ' debug control variables
-    'LONG    useDebug
-    'LONG    showHDMIDebug
-
+{
+    LONG    useDebug
+    LONG    showHDMIDebug
+'}
     ' values specific to user selected motor
     LONG    degrPerTic
     LONG    hallTicsPerRotation
@@ -337,10 +334,11 @@ PUB testSetMotorId(pIDStr)
 ' save name used in debug messages
     strcopy(@motorId, pIdStr, MOTOR_ID_STRLEN)
 
-{
+
 PUB setAcceleration(rate)
 '' NOT WORKING: Limit Acceleration to {rate} where {rate} is [??? - ???] mm/s squared (default is ??? mm/s squared)
-'}
+  ' need to convert from sensible units to ramp increment
+    ramp_inc := rate
 
 PUB setMaxSpeed(speed) | limitSpeed
 '' Limit top-speed to {speed} where {speed} is [1 to 100]  (default is 75)
@@ -402,7 +400,7 @@ PUB driveAtPower(power) | limitPwr, motorIncre, correctedPower
     limitPwr :=  -100 #> power <# 100
     if limitPwr <> power
         debug("! WARNING: driveAtPower() power out of range (corrected):", udec_long(power), " - must be [-100 to +100]")
-    debug("-MOT- driveAtPower(", zstr_(@motorId), ") ", sdec_long(limitPwr), udec_long(ramp_fast), udec_long(ramp_slo))
+    debug("-MOT- driveAtPower(", zstr_(@motorId), ") ", sdec_long(limitPwr), udec_long(ramp_max), udec_long(ramp_min))
     motorPower := limitPwr := -maxSpeed #> limitPwr <# maxSpeed
     correctedPower := (motorIsReversed) ? 0 - limitPwr : limitPwr
     motorIncre := incrementForPower(correctedPower)
@@ -1008,14 +1006,8 @@ PRI confgurePowerLimits(userVoltage) | selectedPower, index
 
 PRI setTargetAccel(nTgtIncr)
     ' these only impact ramping up, ramp_down speed is not impacted
-    if abs(nTgtIncr) > ramp_threshold
-        ramp_fast := framp_fast
-        ramp_slo := framp_slow
-    else
-        ramp_fast := sramp_fast
-        ramp_slo := sramp_slow
     targetIncre := nTgtIncr
-    debug("-MOT- ", sdec_long(targetIncre), " ", sdec_long(ramp_fast), " ", sdec_long(ramp_slo))
+    debug("-MOT- ", sdec_long(targetIncre), " ", sdec_long(ramp_max), " ", sdec_long(ramp_min))
     'tvTargetIncreInM := nTgtIncr / 10_000
 
 PRI motorVoltage(eSelectedPower) : fVolts | index
@@ -1601,11 +1593,11 @@ VAR  {  Motor Parameters  }
     LONG    dead_gap        ' delay between driving h/l side of driver (never drive both at once)
     LONG    pwm_limit       ' max freq of our pwm
     LONG    cfg_ctcks       ' # clock ticks needed to create 2 kHz motor drive loop
-    LONG    motr_ctcks      ' # clock ticks needed to create 43 kHz motor control loop
     LONG    stop_mode       ' control / user setting, enum: [SM_FLOAT, SM_BRAKE]
     LONG    e_stop          ' T/F where T means stop all motor function
-    LONG    ramp_fast       ' 12_500-18.5V 25k angle increment: add this every 500 uSec to ramp up to speed
-    LONG    ramp_slo        ' subtract this every 500 uSec to ramp down to slower speed
+    LONG    ramp_max        ' 12_500-18.5V 50k angle increment: add this every 500 uSec to ramp up fast to speed
+    LONG    ramp_min        ' 12_500-18.5V 12k angle increment: add this every 500 uSec to ramp up slow initially to speed
+    LONG    ramp_inc        ' when ramping down
 
 ' -----------------------------------
     LONG    frame_cnt       ' clock-tics for period of PWM_RATE_IN_HZ
@@ -1639,13 +1631,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 rdlong  params_ptr_, ptra++             ' get parameters pointer
                 add     ptra, #2*4                      '  point to return data, targetIncre is at long index [-1]
                                                         '                        targetAngle is at long index [-2]
-{
-                ' finish our upper duty limit
-                mov     tmpX, dead_gap_
-                sub     duty_max_, tmpX                 ' duty max = frame/2 - (dead-gap/2) - 1
-                sub     duty_max_, twoPercent           ' duty max -= 2%
-                add     duty_min_, tmpX                 ' duty max = 0 + (dead-gap/2) + 1
-'}
+
                 dirl    all_pins                        ' disable PWM and ADC pins for configuration
 
                 wrpin   pwmn, pin_pwm_u_l               ' set up PWM pins
@@ -1707,10 +1693,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
                 call    #.driveall                      ' enable ADC and PWM pins simultaneously for phase-locked operation
 
-                dirl    pin_hall_u                      ' remake HALL pins inputs (they were in-between ADC and PWM pins)
-                dirl    pin_hall_v
-                dirl    pin_hall_w
-
                 mov     pos_, #0                        ' reset pos
                 mov     loop_dtcks_, #0                 ' just in case
                 mov     loop_ctcks_, #0                 ' just in case
@@ -1726,6 +1708,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 setq    #DRVR_PARAMS_LONGS_COUNT-1      ' load fresh parameter table (13 DRVR_PARAMS_LONGS_COUNT longs)
                 rdlong  params_ptr_+1, params_ptr_
 
+                mov     ramp_curr, ramp_min_            ' set initial inc ramp
                 mov     duty_, duty_min_                ' reset duty
                 mov     curr_stop, stop_mode_           ' save current stop mode
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: should motor be freewheeling?
@@ -1837,6 +1820,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_nz       jmp     #.doSpdChange                   ' NO, so not start, go do speed adjustment
                 ' have start
                 mov     drv_state_, #DCS_SPIN_UP        ' We are going to ramp up
+                mov     ramp_curr, ramp_min_            ' set initial ramp
                 ' if we have floated all drive pins, re-enable them
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: did we float pins at last stop?
     if_z        call    #.initAngleFmHall               ' then, let's first get motor initial angle for smooth startup
@@ -1871,6 +1855,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 cmps    drv_incr, tgt_incr          wc    ' Q: Should we slow dn or speed up? (CY=speed up)
     if_nz       modc    _nc                         wc    ' invert C (nCY=slow down), if tgt_incr=FWD
     if_nc       mov     drv_state_, #DCS_SPIN_UP          ' CY=0: speed up
+    if_nc       mov     ramp_curr, ramp_min_              ' set initial ramp
     if_nc       jmp     #.rampUp
     if_c        mov     drv_state_, #DCS_SPIN_DN          ' CY=1: slow down
     if_c        jmp     #.rampDn
@@ -1902,9 +1887,16 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_z        jmp     #.endRUpAtSpeed                   ' YES, (Matched) go mark done
                                                           ' do next UP adjustment or set at-speed
                 abs     abs_incr, drv_incr                ' get abs(drv_incr)
-                cmps    abs_incr, ramp_thresh       wc    ' Q: too early to ramp up fast?
-    if_nc       mov     curr_ramp, ramp_fast_             ' NO, use fast ramp rate
-    if_c        mov     curr_ramp, ramp_slo_              ' YES, use slow ramp rate
+'                cmps    abs_incr, ramp_thresh       wc    ' Q: too early to ramp up fast?
+'    if_nc       mov     curr_ramp, ramp_max_              ' NO, use fast ramp rate
+'    if_c        mov     curr_ramp, ramp_min_              ' YES, use slow ramp rate
+                mov     curr_ramp, ramp_curr              ' current ramp
+                sub     ramp_curr, ramp_min_         wz   ' to calculate next inc, remove min
+     if_z       add     ramp_curr, ramp_inc_              ' first time add inc
+     if_nz      add     ramp_curr, ramp_curr              ' else double current ramp
+                add     ramp_curr, ramp_min_              ' add min back
+                cmps    ramp_curr, ramp_max_         wc   ' too high?
+     if_nc      mov     ramp_curr, ramp_max_              ' Y set to ramp_max
                                                           ' calculate how far we are from desired
                 mov     final_ramp, tgt_incr              ' compute our delta from curr to target
                 subs    final_ramp, drv_incr
@@ -1977,13 +1969,12 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     if_z        jmp     #.endS2CAtZero                  ' yes, go start rampUp
                                                         ' calculate how far we are from desired
                 mov     final_ramp, drv_incr            ' compute our delta from curr to target
-                'debug("DRV: @slow2ch ", sdec_(tgt_incr), " ", sdec_(drv_incr), " ", sdec_(final_ramp))
                                                         ' now are we moving FWD or REV?
                 testbn  drv_incr, #31               wc  ' YES, moving FWD or REV? (bCY=FWD)
                 jmp     #.havefast                      ' jmp to previous ramp code
 .endS2CAtZero
-                'debug("DRV: @zero ", sdec_(tgt_incr))
                 mov     drv_state_, #DCS_SPIN_UP        ' report that we are spinning up in new direction
+                mov     ramp_curr, ramp_min_            ' set initial ramp
                 jmp     #.rampUp                        ' go immediately start moving in opposite direction
 
     ' -------------------------------------------------------------------------
@@ -2168,22 +2159,19 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     ' =========================================================================
     '  PRIVATE (Utiility) Subroutines
     ' -------------------------------------------------------------------------
-.driveall
-    _ret_       dirh    all_pins
-
 .driveon
-    _ret_       dirh    drive_pins
-{
-                dirl    all_pins                        ' disable both ADC and PWM pins
+    _ret_       dirh    drive_pins                      ' just pwm outputs are enabled
+                                                        ' comment previous line if want to use the following for enabling pwm output
+                dirl    all_pins                        ' make sure to disable both ADC and PWM pins
                 wypin   #0, drive_pins                  ' make sure pwm is off
+.driveall
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
                 dirl    pin_hall_u                      ' make sure HALL pins are inputs
                 dirl    pin_hall_v
     _ret_       dirl    pin_hall_w
-'}
 
 .driveoff
-    _ret_       dirl    drive_pins
+    _ret_       dirl    drive_pins                      ' just pwm outputs are floated, we dont enable adc since we want ctl loop to continue running
 
 .wait4adc
 .wait4adcAgn    testp   pin_adc_cur_i           wc      ' wait for ADC sample to be avail. (wtg on 4th pin set up)
@@ -2223,22 +2211,17 @@ third           LONG    1 FRAC 3                ' 120 degrees
 numerator       LONG    3300 << 11              ' numerator for ADC calculations, configured from init to match the adc_fram count rather than 1 << 11
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
 maxPos          LONG    $7FFF_FFFF              ' max positive signed value
-ramp_thresh     LONG    25_000_000              ' fm zero - slow ramp to here then fast ramp ( ~1/5 of 0-max )
-ramp_down       LONG    50_000                  ' used when ramping down, independent ramping speeds up and down.
-
-'twoPercent      LONG    FRAME / 10              ' 2% of frame/2
-'maxDrvU_        LONG    -1
-'minDrvU_        LONG    $7fff_ffff
+ramp_down       LONG    50_000
 
     ' -----------------------------------
     ' Logic Analyzer Instrumentation Code
     ' -----------------------------------
 {
 motrCtlLpPnFld  LONG    TEST_PIN_MOTR_CTL_LP addpins 0  ' convert to pinfield
-drvrTmrPnFld    LONG    TEST_PIN_DRIVE_LP addpins 0  ' convert to pinfield
-drvrTmr2PnFld   LONG    TEST_PIN_DRIVE_LP2 addpins 0  ' convert to pinfield
-drvrTgglPnFld   LONG    TEST_PIN_LP_TOGL addpins 0  ' convert to pinfield
-drvrTggl2PnFld  LONG   TEST_PIN_UNKNOWN addpins 0  ' convert to pinfield
+drvrTmrPnFld    LONG    TEST_PIN_DRIVE_LP addpins 0     ' convert to pinfield
+drvrTmr2PnFld   LONG    TEST_PIN_DRIVE_LP2 addpins 0    ' convert to pinfield
+drvrTgglPnFld   LONG    TEST_PIN_LP_TOGL addpins 0      ' convert to pinfield
+drvrTggl2PnFld  LONG    TEST_PIN_UNKNOWN addpins 0      ' convert to pinfield
 '}
 
 adc_modes       LONG    p_adc_gio | p_count_highs   ' +0 : adc modes, by state
@@ -2328,6 +2311,7 @@ angle_          res 1       ' current driver angle
 prior_angle     res 1       ' prior driver angle
 fwdrev          res 1       ' driver current direction used for indexing into hall angle table
 curr_stop       res 1       ' current stop mode
+ramp_curr       res 1       ' current ramping up value
 
 ' debug variables
 prior_angle_    res 1
@@ -2373,11 +2357,11 @@ duty_dn_    res 1
 dead_gap_   res 1               ' this was OFFSET but now passed into driver
 pwm_limit_  res 1               ' this was PWMLIM but now passed into driver
 cfg_ctcks_  res 1
-motr_ctcks_ res 1               ' not used
 stop_mode_  res 1               ' float or brake mode
 e_stop_     res 1               ' T/F where T means stopal motor function
-ramp_fast_  res 1               ' angle increment: add this every 500 uSec to ramp up to speed
-ramp_slo_   res 1               ' angle decrement: subtract this every 500 uSec to ramp down to slower speed
+ramp_max_   res 1               ' angle increment: add this every 500 uSec to ramp up to speed
+ramp_min_   res 1               ' angle increment: add this every 500 uSec to ramp up slowly to speed
+ramp_inc_   res 1               ' angle decrement: sub to ramp down
 
 ' ------------------------------
 '  PRECISE FORMAT:
