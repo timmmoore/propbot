@@ -187,6 +187,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     'bResetSenseData := FALSE
 
     byte[@motorId] := 0                                 ' terminate an empty string
+    pmotorId := @motorId
 
     targetAngle := $FFFFFFFF                            ' set to not used! (other values only used during testing)
 
@@ -344,8 +345,8 @@ PUB testSetMotorId(pIDStr)
 
 
 PUB setAcceleration(rate)
-'' NOT WORKING: Limit Acceleration to {rate} where {rate} is [??? - ???] mm/s squared (default is ??? mm/s squared)
-  ' need to convert from sensible units to ramp increment
+'' Limit Acceleration to {rate} where {rate} is [??? - ???] mm/s squared (default is ??? mm/s squared)
+  ' need to convert from units to ramp increment
     ramp_inc := rate
 
 PUB setMaxSpeed(speed) | limitSpeed
@@ -1015,12 +1016,14 @@ PRI confgurePowerLimits(userVoltage) | selectedPower, index
         minRevIncreAtPwr := 0 - minFwdIncreAtPwr
     debug("* EXIT 2 CFG ", sdec_long(eUserSelectedVolts), " ", sdec(maxFwdIncreAtPwr), " ", sdec(minFwdIncreAtPwr))
 
-PRI setTargetAccel(nTgtIncr, sync)
+PRI setTargetAccel(nTgtIncr, sync) | inincr
     ' these only impact ramping up, ramp_down speed is not impacted
+    inincr := nTgtIncr
+    nTgtIncr ZEROX= 30                                  ' clear bit 31
     if sync
-        waitatn()                                       ' waiting for caller to send atn, sync updates to multiple motors
+        nTgtIncr |= (1 << 31)                             ' bit 31 set if sync required
     targetIncre := nTgtIncr
-    debug("-MOT- ", sdec_long(targetIncre), " ", sdec_long(ramp_max), " ", sdec_long(ramp_min))
+    debug("-MOT- ", sdec_long(inincr), " ", uhex_long(nTgtIncr), " ", sdec_(nTgtIncr>>31), " ", sdec_long(ramp_max), " ", sdec_long(ramp_min))
     'tvTargetIncreInM := nTgtIncr / 10_000
 
 PRI motorVoltage(eSelectedPower) : fVolts | index
@@ -1760,7 +1763,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 cmp     drv_state_, #DCS_ESTOP      wz      ' Q: were we emergency stopped?
     if_z        mov     drv_state_, #DCS_STOPPED            ' YES, reset to simply stopped so we start out pins correctly
                 mov     sv_tgt_incr, tgt_incr
-                rdlong  tgt_incr, ptra[-1]                  ' get rate of increment ( +/- drive power, or 0 stop)
+                call    #.gettgtincr                        ' get rate of increment ( +/- drive power, or 0 stop)
                 or      tgt_incr, tgt_incr          wz      ' Q: being asked to stop?
     if_nz       jmp     #.notRqStop                         ' NO, not exception, check next
                                                             ' this is a stop request
@@ -2165,18 +2168,28 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     ' =========================================================================
     '  PRIVATE (Utiility) Subroutines
     ' -------------------------------------------------------------------------
+.gettgtincr
+                rdlong  tgt_incr, ptra[-1]              ' get rate of increment ( +/- drive power, or 0 stop)
+                testb   tgt_incr, #31           wc      ' bit 31 is used to carry sync info
+    if_c        pollatn                         wz      ' need to sync, but dont want to wait so if atn not ready
+    if_c_and_z  mov     tgt_incr, sv_tgt_incr           ' reset tgt_incr
+    _ret_       signx   tgt_incr, #30                   ' sign extend back to normal tgt_incr
+
 .driveon
+                'debug("DRV On: ", zstr_(pmotorId), " ", uhex_(drive_pins))
     _ret_       dirh    drive_pins                      ' just pwm outputs are enabled
                                                         ' comment previous line if want to use the following for enabling pwm output
 '                dirl    all_pins                        ' make sure to disable both ADC and PWM pins
 '                wypin   #0, drive_pins                  ' make sure pwm is off
 .driveall
+                'debug("DRV All: ", zstr_(pmotorId), " ", uhex_(all_pins))
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
                 dirl    pin_hall_u                      ' make sure HALL pins are inputs
                 dirl    pin_hall_v
     _ret_       dirl    pin_hall_w
 
 .driveoff
+                'debug("DRV Off: ", zstr_(pmotorId), " ", uhex_(drive_pins))
     _ret_       dirl    drive_pins                      ' just pwm outputs are floated, we dont enable adc since we want ctl loop to continue running
 
 .wait4adc
@@ -2218,6 +2231,8 @@ numerator       LONG    3300 << 11              ' numerator for ADC calculations
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
 ramp_down       LONG    50_000                  ' ramping down decrement
 sync_required   LONG    0                       ' non zero if motor loop should wait to start
+pmotorId        LONG    0
+
     ' -----------------------------------
     ' Logic Analyzer Instrumentation Code
     ' -----------------------------------
