@@ -120,9 +120,13 @@ PUB null()
 
 '' This is not a top-level object
 
-PUB start(eMotorBasePin, eMotorVoltage, eDetectionMode) : ok | legalBase
+PUB start(eMotorBasePin, eMotorVoltage, eDetectionMode) : ok
+    ok := starttx(eMotorBasePin, eMotorVoltage, eDetectionMode, false)
+
+PUB starttx(eMotorBasePin, eMotorVoltage, eDetectionMode, sync) : ok | legalBase
 '' Specify motor control board connect location for this motor and start the driver
     ' setup runtime constants
+    sync_required := sync
     init(eMotorBasePin, eMotorVoltage, eDetectionMode)
     params_ptr := @offset_fwd   ' point to driver variables
     setTargetAccel(0)           ' do NOT move at startup
@@ -1691,6 +1695,9 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
                 wrpin   adc_modes+2, adc_pins           ' switch ADC to pin sampling
 
+                testb   sync_required, #0       wc      ' do we need to wait for attention?
+    if_c        waitatn                                 ' Y: wait to be atn by caller
+
                 call    #.driveall                      ' enable ADC and PWM pins simultaneously for phase-locked operation
 
                 mov     pos_, #0                        ' reset pos
@@ -2212,7 +2219,7 @@ numerator       LONG    3300 << 11              ' numerator for ADC calculations
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
 maxPos          LONG    $7FFF_FFFF              ' max positive signed value
 ramp_down       LONG    50_000
-
+sync_required   LONG    0
     ' -----------------------------------
     ' Logic Analyzer Instrumentation Code
     ' -----------------------------------
