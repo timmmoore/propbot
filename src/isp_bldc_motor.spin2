@@ -252,7 +252,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     '   ramp_min - start ramping at this value
     '   ramp_max - max ramping at this value, once reach this value, keep incrementing with this value
     '   ramp_inc - ramping increment, added to ramp_min every 500us. Effectively defines the acceleration
-    ramp_max := 50_000                    ' 50k angle increment/decrement: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
+    ramp_max := 200_000                   ' 50k angle increment/decrement: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
     ramp_min := 1_500                     ' 1k5 angle increment: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
     ramp_inc := 22                        ' initial increment to ramping speed, added to ramp_min every 500us until ramp_max reached
     ramp_down := 50_000                   ' fixed ramp down speed
@@ -584,7 +584,8 @@ PUB getCurrent() : fAmps, fWatts
     ' gain and R is combined into rSenseForBoard -> RevA rSenseForBoard 5, RevB rSenseForBoard 150
     ' RevB. 10A, through 0,003R -> 0.03mV -> (50gain) -> 1.5V. 20A -> 3V, 10A -> 1.5V, 1A -> 0.15V
     ' RevA. 10A, through 0.005R -> 0.05mV -> (1gain) -> 50mW, 20A -> 0.1V, 10A -> 50mV, 1A -> 5mV
-    ' however, adc isn't in standard adc but in p_count_highs with a period, so scaling needed by SCALE_AMPS
+    ' adc uses p_count_highs with a period, so scaling needed for period
+    ' this is handled by updating numerator in init() to include period (adc_fram)
     fAmps := sense_i_mV/rSenseForBoard                                          ' in multiples of 0.1mA
     fWatts := round((float(fAmps) *. fMotorVolts)/. F_SCALE_WATTS)              ' in mW
 
@@ -630,50 +631,47 @@ PUB boardIdString() : pZStr
             debug("* [CODE] bad return value from getBoardType()")
             pZStr := @"????"
 
-PUB getBoardType() : eBoardRev | pSenseCommon, pinSum, bDetectBoard
+PUB getBoardType() : eBoardRev | pSenseCommon, pinSum
 '' ID Revision of attached BLDC driver board
     ' returns one of REV_Unknown, REV_A, REV_B
     eBoardRev := REV_Unknown
     ' if user is overriding detection then use users' override value
-    bDetectBoard := false
      case eUserDetectionMode    ' setup by init()
         REV_A:
             eBoardRev := REV_A
         REV_B:
             eBoardRev := REV_B
         other:
-            bDetectBoard := true
-    if bDetectBoard
-        ' do we know the base pin of the board...??
-        if pinbase == VALUE_NOT_SET
-            debug("BLDC: getBoardType() pinbase: ** NOT SET **")
-        else
-            ' yes, detect the board rev
-            pinSum := 0
-            pSenseCommon := pinbase + 4
-            'debug("BLDC: getBoardType() pinbase=(", udec_(pinbase), "), pSenseCommon=(", uhex_Long_(pSenseCommon), ")")
-            pinhigh(pSenseCommon)                ' charge capacitor on RevB boards
-            waitms(1)
-            pinfloat(pSenseCommon)               ' release the pin, ready to read state
-
-            repeat 500                    ' check pin state 500 times, x = sum of results
-                pinSum += pinread(pSenseCommon)
-
-            ' Handle the result!
-            ' Note: RevA will always be 0 due to a 1K pulldown on that board.
-            '       RevB count will vary with clkfreq (due to capacitor discharge)- typically in the range of 40 to 180
-            '       If no board attached, count will always be >250, and typically will be 500.
-
-            if pinSum == 0
-                debug("--- ", udec(pinSum), ", 64010 Rev A")
-                eBoardRev := REV_A
-            elseif pinSum > 250
-                debug("--- ", udec(pinSum), ", Board not detected!")
+            ' do we know the base pin of the board...??
+            if pinbase == VALUE_NOT_SET
+                debug("BLDC: getBoardType() pinbase: ** NOT SET **")
             else
-                debug("--- ", udec(pinSum), ", 64010 Rev B")
-                eBoardRev := REV_B
+                ' yes, detect the board rev
+                pinSum := 0
+                pSenseCommon := pinbase + 4
+                'debug("BLDC: getBoardType() pinbase=(", udec_(pinbase), "), pSenseCommon=(", uhex_Long_(pSenseCommon), ")")
+                pinhigh(pSenseCommon)                ' charge capacitor on RevB boards
+                waitms(1)
+                pinfloat(pSenseCommon)               ' release the pin, ready to read state
 
-            'debug("--- getBoardType() pinSum=(", udec_(pinSum), "), eBoardRev=(", udec_(eBoardRev), ")")
+                repeat 500                    ' check pin state 500 times, x = sum of results
+                    pinSum += pinread(pSenseCommon)
+
+                ' Handle the result!
+                ' Note: RevA will always be 0 due to a 1K pulldown on that board.
+                '       RevB count will vary with clkfreq (due to capacitor discharge)- typically in the range of 40 to 180
+                '       If no board attached, count will always be >250, and typically will be 500.
+
+                if pinSum == 0
+                    debug("--- ", udec(pinSum), ", 64010 Rev A")
+                    eBoardRev := REV_A
+                elseif pinSum > 250
+                    debug("--- ", udec(pinSum), ", Board not detected!")
+                else
+                    debug("--- ", udec(pinSum), ", 64010 Rev B")
+                    eBoardRev := REV_B
+
+                'debug("--- getBoardType() pinSum=(", udec_(pinSum), "), eBoardRev=(", udec_(eBoardRev), ")")
 
 
 PUB isReady() : bState
@@ -718,7 +716,6 @@ CON { --- PUBLIC Utility Methods --- }
 
 PUB validBasePinForChoice(userBasePin) : legalBasePin
 '' VALIDATE users' base-pin choice returns legalBasePin or INVALID_PIN_BASE
-    ' note VALUE_NOT_SET = INVALID_PIN_BASE = -1
     legalBasePin := validatePinBase(userBasePin)
     debug("*VAL* ", sdec_long(legalBasePin))
 
@@ -746,7 +743,6 @@ PUB validDetectModeForChoice(userDetMode) : legalMode
     if lookdown(userDetMode: BRD_AUTO_DET..BRD_REV_B) == 0
         legalMode := INVALID_DET_MODE
     debug("*VAL* ", sdec_long(legalMode))
-
 
 PUB hallTicInfoForMotor() : degreesPerTic, ticsPerRotation
 '' Return numbers for user selected motor (for use by two-wheel-steering object!)
@@ -869,63 +865,46 @@ PRI offsetsForMotor(eMotorType) : fwdDegrees, revDegrees | ofsDegr, index
     case eMotorType
       MOTR_DOCO_4KRPM:
         index := lookdown(user.DRIVE_VOLTAGE: PWR_7p4V..PWR_24p0V)
+        ' 15 degrees per tic so +- 15 is our offset?
+{
+            ' 7.4V:  51-54 best, 55 fault?! (Verif) 52 starts better!  B:28, 33
+            ' 11.1V: 52-54 best, 55 fault?! (Verif)                    B: 33, 42, 44, 38
+            ' 12V:   52-54 best (Verif)                                B: 39, 42
+            ' 14.8V: 51-55 best (Verif)                                B: 40, 44
+            ' 18.5V: 51-55 best (Verif)                                B: 36, 24, 44
+            ' 22.2V: 51-54 best (Verif)                                B: 37, 51
+            ' 24V:   52-58 best (Verif)                                B: 45, 48
+}
         if eDetectedBoard == REV_B
           if (ofsDegr := lookup(index: 33, 33, 39, 40, 36, 37, 45)) == 0
               ofsDegr := 45
         else
           if (ofsDegr := lookup(index: 52, 53, 53, 53, 54, 54, 53)) == 0
               ofsDegr := 53
-{
-        ' NOTES:
-        ' 15 degrees per tic so +- 15 is our offset?
-        if user.DRIVE_VOLTAGE == PWR_7p4V
-            ofsDegr := (eDetectedBoard == REV_B) ? 33 : 52   ' 51-54 best, 55 fault?! (Verif) 52 starts better!  B:28, 33
-        elseif user.DRIVE_VOLTAGE == PWR_11p1V
-            ofsDegr := (eDetectedBoard == REV_B) ? 33 : 53   ' 52-54 best, 55 fault?! (Verif)   B: 33, 42, 44, 38
-        elseif user.DRIVE_VOLTAGE == PWR_12p0V
-            ofsDegr := (eDetectedBoard == REV_B) ? 39 : 53 ' 52-54 best (Verif)   B: 39, 42
-        elseif user.DRIVE_VOLTAGE == PWR_14p8V
-            ofsDegr := (eDetectedBoard == REV_B) ? 40 : 53   ' 51-55 best (Verif)   B: 40, 44
-        elseif user.DRIVE_VOLTAGE == PWR_18p5V
-            ofsDegr := (eDetectedBoard == REV_B) ? 36 : 54   ' 51-55 best (Verif)   B: 36, 24, 44
-        elseif user.DRIVE_VOLTAGE == PWR_22p2V
-            ofsDegr := (eDetectedBoard == REV_B) ? 37 : 54   ' 51-54 best (Verif)   B: 37, 51
-        elseif user.DRIVE_VOLTAGE == PWR_24p0V
-            ofsDegr := (eDetectedBoard == REV_B) ? 45 : 53  ' 52-58 best (Verif)   B: 45, 48
-        else
-            ofsDegr := (eDetectedBoard == REV_B) ? 45 : 53
-'}
         fwdDegrees := 360 - ofsDegr                 ' 0 is bad > 2A!
         revDegrees := ofsDegr                       ' vs. using 360?
       other:
-        ' 4 degrees per tic, offset was actually 5 tics!
-        '  or 20 degrees (0.0556 of rotation)
-        { Doug's motor
-        ofsDegr := 20
-        fwdDegrees := ofsDegr
+        ' 4 degrees per tic, offset was actually 5 tics! or 20 degrees (0.0556 of rotation)
+        ' from characterization at 18v5:
+        fwdDegrees := ofsDegr := 43
         revDegrees := 360 - fwdDegrees
-        }
-
-        ' Chips values (orig driver)
-        ' CHIP ORIG: offset_fwd long    280 frac 360                    '280 frac 360 (Doug's motor) 20
-        ' CHIP ORIG: offset_rev long    230 frac 360                    '230 frac 360 (Doug's motor) 340
-
-        ' my values from characterization at 18v5:
-        ofsDegr := 43
-        fwdDegrees := ofsDegr                 ' chip #1 fwd 280 / rev 80
-        revDegrees := 360 - fwdDegrees
-        {
-        ' In the following smaller value is FWD, 360 - smaller is REV
-        ofsDegr := 80
-        fwdDegrees := ofsDegr                 ' chip #1 fwd 280 / rev 80
-        revDegrees := 360 - fwdDegrees
-        '}
-        {
-        ' In the following smaller value is FWD, 360 - smaller is REV
-        ofsDegr := 130
-        fwdDegrees := ofsDegr                 ' chip #2 fwd 230 / rev 130
-        revDegrees := 360 - fwdDegrees
-        '}
+{
+        Chips values (orig driver)
+         offset_fwd long    280 frac 360
+         offset_rev long    230 frac 360
+        Doug's motor
+         ofsDegr := 20
+         fwdDegrees := ofsDegr
+         revDegrees := 360 - fwdDegrees
+        In the following smaller value is FWD, 360 - smaller is REV
+         ofsDegr := 80
+         fwdDegrees := ofsDegr                 ' chip #1 fwd 280 / rev 80
+         revDegrees := 360 - fwdDegrees
+        In the following smaller value is FWD, 360 - smaller is REV
+         ofsDegr := 130
+         fwdDegrees := ofsDegr                 ' chip #2 fwd 230 / rev 130
+         revDegrees := 360 - fwdDegrees
+}
 
 PRI getInternalDetectMode(eDetectMode) : eValidMode, bUserOverride | legalMode
 ' ensure suer specifies a good value
@@ -968,26 +947,19 @@ PRI confgurePowerLimits(userVoltage) | selectedPower, index
                 maxRevIncreAtPwr := lookup(index: -385_000_000, -287_500_000, -485_000_000, -388_000_000, -449_500_000, -420_000_000, -460_000_000)
             else
                     ' 282_000_000 100% anything above yields RPM 1885.0, cts/Sec 754, @0.11A
-                    ' 100% anything above yields RPM 1885.0, cts/Sec 754, @0.11A
                     ' 545_000_000 100% anything above yields RPM 3645.0, cts/Sec 1458, @0.50A
-                    ' 100% anything above yields RPM 3645.0, cts/Sec 1458, @0.53A
                     ' 335_000_000 100% anything above yields RPM 2242.0, cts/Sec 897, @0.14A
-                    ' 100% anything above yields RPM 2242.0, cts/Sec 897, @0.61A
-                    ' 376_000_000 100% anything above yields RPM 2517.0!, cts/Sec 1007, @0.88A
-                    ' 100% anything above yields RPM 2517.0!, cts/Sec 1007, @0.83A
-                    ' 376_000_000 by hand: 100% anything above yields RPM 2_745, cts/sec 1_098
-                    ' by hand: 100% anything above yields RPM 2_810, cts/sec 1_124
-                    ' by hand: 100% anything above yields RPM 2_877, cts/sec 1_151
-                    ' by hand: 100% anything above yields RPM 2_940, cts/sec 1_178
-                    ' by hand: 100% anything above yields RPM 3_010, cts/sec 1_204
-                    ' by hand: 100% anything above yields RPM 3_077, cts/sec 1_231
-                    ' by hand: 100% anything above yields RPM 3_145, cts/sec 1_258
+                    ' 376_000_000 100% anything above yields RPM 2517.0, cts/Sec 1007, @0.88A
+                    ' 376_000_000 100% anything above yields RPM 2_745, cts/sec 1_098
+                    '             100% anything above yields RPM 2_810, cts/sec 1_124
+                    '             100% anything above yields RPM 2_877, cts/sec 1_151
+                    '             100% anything above yields RPM 2_940, cts/sec 1_178
+                    '             100% anything above yields RPM 3_010, cts/sec 1_204
+                    '             100% anything above yields RPM 3_077, cts/sec 1_231
+                    '             100% anything above yields RPM 3_145, cts/sec 1_258
                     ' 470_000_000 100% anything above yields RPM 2662.0, cts/Sec 1065, @0.89A
-                    ' 100% anything above yields RPM 2662.0, cts/Sec 1065, @0.84A
-                    ' 100% anything above yields RPM 3145.0, cts/Sec 1258, @0.78A
-                    ' 100% anything above yields RPM 3145.0, cts/Sec 1258, @0.77A
+                    '             100% anything above yields RPM 3145.0, cts/Sec 1258, @0.78A
                     ' 391_000_000 100% anything above yields RPM 2615.0, cts/Sec 1046, @0.620A
-                    ' 100% anything above yields RPM 2615.0, cts/Sec 1046, @0.640A
                 maxFwdIncreAtPwr := lookup(index:  282_000_000,  545_000_000,  335_000_000,  376_000_000,  398_000_000,  470_000_000,  391_000_000)
                 maxRevIncreAtPwr := lookup(index: -282_000_000, -545_000_000, -335_000_000, -376_000_000, -398_000_000, -470_000_000, -391_000_000)
         else
@@ -1017,11 +989,9 @@ PRI confgurePowerLimits(userVoltage) | selectedPower, index
     debug("* EXIT 2 CFG ", sdec_long(eUserSelectedVolts), " ", sdec(maxFwdIncreAtPwr), " ", sdec(minFwdIncreAtPwr))
 
 PRI setTargetAccel(nTgtIncr, sync) | inincr
-    ' these only impact ramping up, ramp_down speed is not impacted
     inincr := nTgtIncr
     nTgtIncr ZEROX= 30                                  ' clear bit 31
-    if sync
-        nTgtIncr |= (1 << 31)                             ' bit 31 set if sync required
+    nTgtIncr |= (sync << 31)                            ' bit 31 set if sync required
     targetIncre := nTgtIncr
     debug("-MOT- ", sdec_long(inincr), " ", uhex_long(nTgtIncr), " ", sdec_(nTgtIncr>>31), " ", sdec_long(ramp_max), " ", sdec_long(ramp_min))
     'tvTargetIncreInM := nTgtIncr / 10_000
@@ -1408,29 +1378,6 @@ PRI absDistanceInTics(newPos, priorPos) : nHallTics
         ' 9 -> 6 = abs(9 - 6) = abs(3) = 3
         ' 9 -> 12 = abs(9 - 12) = abs(-3) = 3
     nHallTics := abs(priorPos - newPos)
-{
-    if newPos == priorPos
-        nHallTics := 0
-    elseif newPos < 0
-        ' handle new-negative case
-        if priorPos < 0
-            '  -7 -> -9 = abs(-9) - abs(-7) = abs(2) = 2
-            '  -11 -> -9 = abs(-9) - abs(-11) = abs(-2) = 2
-            nHallTics := abs(abs(newPos) - abs(priorPos))
-        else
-            '  9 -> -9 = 18 = abs(9) + abs(-9) = 18
-            nHallTics := abs(newPos) + abs(priorPos)
-    else
-        ' handle new-positive case
-        if priorPos < 0
-            ' -9 -> 6 = 6 + abs(-9) = 15
-            ' -3 -> 6 = 6 + abs(-3) = 9
-            nHallTics := newPos + abs(priorPos)
-        else
-            ' 9 -> 6 = 6 - 9 = abs(-3) = 3
-            ' 9 -> 12 = 12 - 9 = abs(3) = 3
-            nHallTics := abs(newPos - priorPos)
-'}
 
 CON ' --- The Motor driver ---
 
@@ -1811,7 +1758,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
                 ' first, if faulted, clear fault
                 cmp     drv_state_, #DCS_FAULTED    wz  ' Q: is MOTOR faulted?
     if_nz       jmp     #.chkStopCmd                    ' NO, go to next check
-            ' MOTOR faulted, clear fault so we can run again
+                ' MOTOR faulted, clear fault so we can run again
 .resetFault
                 mov     drv_incr, #0                    ' reset incr to stopped
                 mov     prior_incr, #0                  ' reset prior
@@ -2038,7 +1985,7 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
     ' -------------------------------------------------------------------------
                 getct   drvrSrtTix                  ' remember when we started this loop
 
-                call    #.wait4adc                  ' allow ADC rest period (wait for sample ready)
+                call    #.wait4adc                  ' allow ADC rest period (wait for sample ready), also wait for start of ctl loop
                 rdpin   sense_u_, pin_adc_u_i       ' pin samples done, read them
                 rdpin   sense_v_, pin_adc_v_i
                 rdpin   sense_w_, pin_adc_w_i
@@ -2161,7 +2108,6 @@ driver          mov     drv_state_, #DCS_STOPPED        ' motor is currently sto
 
                 setq    #DRVR_STATUS_LONGS_COUNT-1  ' write drive[3]/sense[4]/hall/pos/duty/err/ticks[2]/state to hub
                 wrlong  drive_u_, ptra
-                ' wait for rest of time here...
 .loop           jnct1   #.ctlMotor                  ' if not time for control loop just go to drive loop
                 jmp     #.drvMotor
 
@@ -2231,7 +2177,7 @@ numerator       LONG    3300 << 11              ' numerator for ADC calculations
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
 ramp_down       LONG    50_000                  ' ramping down decrement
 sync_required   LONG    0                       ' non zero if motor loop should wait to start
-pmotorId        LONG    0
+pmotorId        LONG    0                       ' pointer to motor id
 
     ' -----------------------------------
     ' Logic Analyzer Instrumentation Code
@@ -2363,7 +2309,7 @@ pin_pwm_x_h     res 1       ' basepin + 15
 
 '  ADC variables
 gio_levels      res 4
-vio_levels      res 4
+vio_levels                      ' vio and scl are never used at the same time, so overlap
 scl_levels      res 4
 ' ------------------------------
 '  PRECISE FORMAT:
@@ -2400,11 +2346,11 @@ duty_       res 1
 err_        res 1
 loop_dtcks_ res 1
 loop_ctcks_ res 1
-drv_state_  res 1       ' enum: DCS_STOPPED, DCS_SPIN_UP, DCS_AT_SPEED, DCS_SPIN_DN, etc
+drv_state_  res 1               ' enum: DCS_STOPPED, DCS_SPIN_UP, DCS_AT_SPEED, DCS_SPIN_DN, etc
 ' fault is here... (but external only)
 
 ' $1f8 for reg cogs
-    fit     496  ' 451 currently works
+    fit     496  ' 453 currently works
 
 CON { license }
 {{
