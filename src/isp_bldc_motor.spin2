@@ -2098,7 +2098,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 rdlong  tgt_incr, ptra[-1]              ' get rate of increment ( +/- drive power, or 0 stop)
                 testb   tgt_incr, #31               wc  ' bit 31 is used to carry sync info
     if_c        pollatn                             wz  ' need to sync, but dont want to wait so if atn not ready
-    if_c_and_z  mov     tgt_incr, sv_tgt_incr           ' reset tgt_incr
+    if_c_and_nz mov     tgt_incr, sv_tgt_incr           ' reset tgt_incr, if wanting atn and not received it yet
     _ret_       signx   tgt_incr, #30                   ' sign extend back to normal tgt_incr
 
 .driveall
@@ -2133,7 +2133,6 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
     if_c        add     angle_, offset_fwd_             ' adjust phase offset for hall sensor
     if_nc       add     angle_, offset_rev_             ' can spin up in either direction
     _ret_       mov     prior_angle, angle_             ' show we are already here
-
 '
 ' =========================================================================
 all_pins        LONG    (13 << 6) + 0           ' all-pins variable (0 addpins 13) needs ADD/OR of basepin, skip last 2 pwm pins, not used
