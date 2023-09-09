@@ -1641,7 +1641,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 testb   sync_required, #0           wc      ' do we need to wait for attention?
     if_c        waitatn                                     ' Y: wait to be atn by caller
 
-                call    #.driveall                          ' enable ADC and PWM pins simultaneously for phase-locked operation
+                call    #.driveinit                         ' enable ADC and PWM pins simultaneously for phase-locked operation
 
                 mov     pos_, #0                            ' reset pos
                 mov     loop_dtcks_, #0                     ' just in case
@@ -1661,10 +1661,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 mov     ramp_curr, ramp_min_                ' set initial inc ramp
                 mov     duty_, duty_min_                    ' reset duty
                 mov     curr_stop, stop_mode_               ' save current stop mode
-                cmp     stop_mode_, #SM_FLOAT       wz      ' Q: should motor be freewheeling?
-                call    #.initAngleFmHall                   ' make sure angle set correctly, so motor doesn't jerk first time enters ctlMotor
-    if_nz       call    #.driveon                           ' NO, set control pins back to output
-    if_z        call    #.driveoff                          ' Yes, float drive pins
+                call    #.checkstop                         ' set drive on or off according to stop mode
 
     ' =========================================================================
     '  MOTOR DRIVE LOOP - runs at 2.0 kHz (500.0 uSec period)
@@ -1687,7 +1684,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
 .eStop
                 cmp     drv_state_, #DCS_ESTOP      wz      ' Q: Are we already Emergency Stopped?
     if_z        jmp     #.endRqst                           ' YES, motor is at ESTOP, just exit (w/o increment)
-                call    #.driveoff                          ' NO, float all control pins (make them inputs)
+                call    #.driveoff                          ' set drive pwm off
                 mov     drv_state_, #DCS_ESTOP              ' mark that we are stopped
                 jmp     #.endRqst                           ' motor now at ESTOP, just exit (w/o increment)
 .noEStop
@@ -1703,11 +1700,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 cmp     curr_stop, stop_mode_       wz      ' stopped, see if stop mode has changed and update drive_pin state
     if_z        jmp     #.endRqst                           ' no change so done
                 mov     curr_stop, stop_mode_               ' update curr stop mode
-                cmp     stop_mode_, #SM_FLOAT       wz      ' Q: what is new stop mode, should motor be freewheeling?
-    if_nz       call    #.initAngleFmHall                   ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
-                                                            ' fault -> nofault -> stop mode=BRAKE, will cause jerk without .initAngleFmHall
-    if_nz       call    #.driveon                           ' NO, set control pins back to output
-    if_z        call    #.driveoff                          ' Yes, float drive pins
+                call    #.checkstop                         ' set drive on or off according to stop mode
                 jmp     #.endRqst                           ' YES, motor at STOP, just exit (w/o increment)
 .notRqStop
                 cmp     sv_tgt_incr, tgt_incr       wz      ' Q: do we have a new request?
@@ -1750,10 +1743,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 mov     angle_, #0                          ' just in case
                 mov     drv_state_, #DCS_STOPPED            ' reset fault -> to stopped
                                                             ' drive_pins were floated when detect fault
-                cmp     stop_mode_, #SM_FLOAT       wz      ' Q: are we floating pins during stop?
-    if_nz       call    #.initAngleFmHall                   ' No, figure out where motor is before enabling drive pins
-                                                            ' stops jerk coming out of fault
-    if_nz       call    #.driveon                           ' NO, set control pins back to output
+                call    #.checkstop                         ' set drive pwm according to stop mode
                 ' if we were faulted, we are already stopped so just do nothing if new stop request
                 or      tgt_incr, tgt_incr          wz      ' Q: is stop request?
     if_z        jmp     #.endRqst                           ' YES, is stop and motor STOPPED, just exit (w/o increment)
@@ -1768,10 +1758,8 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 cmp     drv_state_, #DCS_STOPPED    wz      ' Q: are we stopped?
     if_nz       jmp     #.doSpdChange                       ' NO, so not start, go do speed adjustment
                                                             ' have start
-                ' if we have floated all drive pins, re-enable them
-                cmp     stop_mode_, #SM_FLOAT       wz      ' Q: did we float pins at last stop?
-    if_z        call    #.initAngleFmHall                   ' then, let's first get motor initial angle for smooth startup
-    if_z        call    #.driveon                           ' YES, set control pins back to output
+                                                            ' if we have floated all drive pins, re-enable them
+                call    #.checkstopfloatoff                 ' set drive off according stop mode
 .dospinup
                 mov     drv_state_, #DCS_SPIN_UP            ' We are going to ramp up
                 mov     ramp_curr, ramp_min_                ' set initial ramp
@@ -1828,10 +1816,8 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
 ' ------------------------------------
 .rampUp
                 ' if we don't have it, preset our starting angle (assume motor moved during float!)
-                cmp     stop_mode_, #SM_FLOAT       wz      ' Q: are we floating pins at stop?
     if_z        or      drv_incr, drv_incr          wz      ' -and- are we stopped, just about to spin up?
-    if_z        call    #.initAngleFmHall                   ' then, let's first get motor initial angle for smooth startup
-'    if_z        call    #.driveon
+    if_z        call    #.checkstopfloaton                  ' set drive on according stop mode
                                                             ' if we are at target, stop the ramp effort
                 cmps    drv_incr, tgt_incr          wz      ' Q: Did we match target?
     if_z        jmp     #.endRUpAtSpeed                     ' YES, (Matched) go mark done
@@ -1893,8 +1879,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 mov     drv_state_, #DCS_STOPPED            ' report that we are stopped
                 mov     duty_, duty_min_                    ' reset duty
                 ' if we are to freewheel the motor let's float all drive pins
-                cmp     stop_mode_, #SM_FLOAT       wz      ' Q: are we floating pins during stop?
-    if_z        call    #.driveoff                          ' YES, float all control pins (make them inputs)
+                call    #.checkstopfloatoff                 ' set drive off according to stop mode
                 jmp     #.endRqst                           ' motor STOPPED, just exit (w/o increment)
 
 ' -------------------------------------------------------------------------
@@ -2070,8 +2055,8 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 abs     tmpY, err_                      ' fault?
                 cmp     tmpY, #125                  wc  ' up to ~176deg differ from requested?
     if_c        jmp     #.noFault
-                call    #.driveoff                      ' at FAULT: float all control pins (make them inputs)
-                wypin   #0, drive_pins                  ' reset all pwm values to OFF (better restart after fault)
+                call    #.driveoff                      ' at FAULT: disable pwm output
+                'wypin   #0, drive_pins                  ' reset all pwm values to OFF (better restart after fault)
                 mov     drv_state_, #DCS_FAULTED        '  also on FAULT: mark our motor as FAULTED
                 wrlong  maxNeg, ptra[DRVR_STATUS_LONGS_COUNT] '  also on FAULT: report fault
 
@@ -2101,16 +2086,29 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
     if_c_and_nz mov     tgt_incr, sv_tgt_incr           ' reset tgt_incr, if wanting atn and not received it yet
     _ret_       signx   tgt_incr, #30                   ' sign extend back to normal tgt_incr
 
-.driveall
+.driveinit                                              ' init drive pwm
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
                 dirl    pin_hall_u                      ' make sure HALL pins are inputs
                 dirl    pin_hall_v
                 dirl    pin_hall_w
-.driveon
-    _ret_       mov     driveoff, #0                    ' drive pwm output
+    _ret_       mov     driveoff, #0                    ' drive pwm output enabled
 
-.driveoff
+.driveoff                                               ' disable pwm always
     _ret_       mov     driveoff, #1                    ' pwm output 0
+
+.checkstopfloaton                                       ' set drive enabled according to stop mode
+                cmp     stop_mode_, #SM_FLOAT       wz  ' Q: what is stop mode, should motor be freewheeling?
+    if_z        call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
+    _ret_       mov     driveoff, #0                    ' set drive output enabled
+
+.checkstopfloatoff                                      ' set drive disabled according to stop mode
+                skip    #%10                            ' same as checkstop without initAngleFmHall
+.checkstop                                              ' set drive enabled or disabled according to stop mode
+                cmp     stop_mode_, #SM_FLOAT       wz  ' Q: what is new stop mode, should motor be freewheeling?
+    if_nz       call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
+    if_nz       mov     driveoff, #0                    ' pwm output enabled
+    if_z        mov     driveoff, #1                    ' pwm output disabled
+                ret
 
 .wait4adc
 .wait4adcAgn    testp   pin_adc_cur_i               wc  ' wait for ADC sample to be avail. (wtg on 4th pin set up)
