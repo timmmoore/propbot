@@ -62,7 +62,7 @@ CON { fixed io pins }
   BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
   BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
-  DEADBAND                      = 1                             ' ignore speed lower than this
+  DEADBAND                      = 1                             ' ignore speeds slower than this
   MOTOROFFONIGNOREJOYSTICK      = true
 
 OBJ { our Drive Subsystem }

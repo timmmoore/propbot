@@ -13,7 +13,7 @@
 
 CON { internal constants }
 
-    kPI             = 3.14159       ' PI approx 3.14159
+    kPI             = PI            ' PI approx 3.14159
     kMM_IN_INCH     = 25.4          ' One inch is equal to 25.4 mm
     kINCH_IN_MM     = 0.03937       ' One millimeter is equal to 0.03937 inches
     kFPS_IN_MMPS    = 0.00328084    ' 1 mm/sec = 0.00328084 ft/sec
@@ -41,7 +41,7 @@ PUB circInMMforDiaInInchFloat(fDiaInch) : nCircInMM | fValue
     nCircInMM := 0
     if fDiaInch <> 0.0
         fValue := fDiaInch *. kPI
-        nCircInMM := trunc(fValue *. kMM_IN_INCH)
+        nCircInMM := round(fValue *. kMM_IN_INCH)
 
 PUB floatCircInMMforDiaInInchFloat(fDiaInch) : fCircInMM | fValue
 '' Return circumference in mm for given diameter in inch
