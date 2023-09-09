@@ -1625,12 +1625,9 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 qdiv    numerator, vio_levels+2
                 qdiv    numerator, vio_levels+3
 
-                getqx   scl_levels+0
-                waitx   #5                                  ' wait 20ns: 4 @ 200 MHz, 5.4 @ 270 MHz
+                getqx   scl_levels+0                         ' getqx waits for the results, but need to get result before next is written
                 getqx   scl_levels+1
-                waitx   #5
                 getqx   scl_levels+2
-                waitx   #5
                 getqx   scl_levels+3
 
                 ' finally, configure the current sense pins for main loop
@@ -2056,7 +2053,6 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 cmp     tmpY, #125                  wc  ' up to ~176deg differ from requested?
     if_c        jmp     #.noFault
                 call    #.driveoff                      ' at FAULT: disable pwm output
-                'wypin   #0, drive_pins                  ' reset all pwm values to OFF (better restart after fault)
                 mov     drv_state_, #DCS_FAULTED        '  also on FAULT: mark our motor as FAULTED
                 wrlong  maxNeg, ptra[DRVR_STATUS_LONGS_COUNT] '  also on FAULT: report fault
 
@@ -2094,20 +2090,20 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
     _ret_       mov     driveoff, #0                    ' drive pwm output enabled
 
 .driveoff                                               ' disable pwm always
-    _ret_       mov     driveoff, #1                    ' pwm output 0
+    _ret_       mov     driveoff, #1                    ' drive pwm output disabled
 
 .checkstopfloaton                                       ' set drive enabled according to stop mode
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: what is stop mode, should motor be freewheeling?
     if_z        call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
-    _ret_       mov     driveoff, #0                    ' set drive output enabled
+    _ret_       mov     driveoff, #0                    ' drive pwm output enabled
 
 .checkstopfloatoff                                      ' set drive disabled according to stop mode
                 skip    #%10                            ' same as checkstop without initAngleFmHall
-.checkstop                                              ' set drive enabled or disabled according to stop mode
+.checkstop                                              ' set drive motor off according to stop mode
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: what is new stop mode, should motor be freewheeling?
     if_nz       call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
-    if_nz       mov     driveoff, #0                    ' pwm output enabled
-    if_z        mov     driveoff, #1                    ' pwm output disabled
+    if_nz       mov     driveoff, #0                    ' drive pwm output enabled
+    if_z        mov     driveoff, #1                    ' drive pwm output disabled
                 ret
 
 .wait4adc
@@ -2314,7 +2310,7 @@ drv_state_  res 1               ' enum: DCS_STOPPED, DCS_SPIN_UP, DCS_AT_SPEED, 
 ' fault is here... (but external only)
 
 ' $1f8 for reg cogs
-    fit     496  ' 457 currently works
+    fit     496  ' 448 currently works
 
 CON { license }
 {{
