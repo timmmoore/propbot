@@ -27,7 +27,7 @@
 ''                              force speed to 0 when joysticks are disabled
 ''                              add deadband to speed, if very slow bot jerks, so have a minimum speed
 ''   Updated.... 8 Sept 2023 (timmoore)
-''                              connect VRA to setacceleration
+''                              connect VRA to setAcceleration
 ''
 '' =================================================================================================
 
@@ -178,10 +178,10 @@ VAR
     long    priorDirection
     long    rcSpeed
     long    rcDirection
-    long    nLtAmps
-    long    nLtWatts
-    long    nRtAmps
-    long    nRtWatts
+    long    nLtmAmps
+    long    nLtmWatts
+    long    nRtmAmps
+    long    nRtmWatts
 
     long    bLastShowState
     long    bLastEmerCutoff
@@ -206,10 +206,10 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
     debug("* VRA        - acceleration")
     debug("------")
 
-    bLastShowState := VALUE_NOT_SET ' value can't happen
-    bLastIgnoreJoyStks := VALUE_NOT_SET ' value can't happen
-    bLastEmerCutoff := VALUE_NOT_SET ' value can't happen
-    bLastShowDriveStates := VALUE_NOT_SET ' value can't happen
+    bLastShowState := VALUE_NOT_SET                     ' value can't happen
+    bLastIgnoreJoyStks := VALUE_NOT_SET                 ' value can't happen
+    bLastEmerCutoff := VALUE_NOT_SET                    ' value can't happen
+    bLastShowDriveStates := VALUE_NOT_SET               ' value can't happen
 
     'loopCt := 0
     repeat
@@ -237,12 +237,11 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
                 wheels.showDriveStates()
             bLastShowDriveStates := bShowDriveStates
 
-        nLtAmps, nLtWatts, nRtAmps, nRtWatts := wheels.getCurrent()
-        'debug("  ltA=", sdec_long_(nLtAmps), ", rtA=", sdec_long_(nRtAmps))
+        nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
         if bShowState <> bLastShowState
             if bShowState
-                debug("  ltmA=", sdec_(nLtAmps/10), ".", sdec_(nLtAmps//10), ", rtmA=", sdec_(nRtAmps/10), ".", sdec_(nRtAmps//10))
-                debug("  ltmW=", sdec_(nLtWatts), ", rtmW=", sdec_(nRtWatts))
+                debug("  ltmA=", sdec_(nLtmAmps/10), ".", sdec_(nLtmAmps//10), ", rtmA=", sdec_(nRtmAmps/10), ".", sdec_(nRtmAmps//10))
+                debug("  ltmW=", sdec_(nLtmWatts), ", rtmW=", sdec_(nRtmWatts))
             bLastShowState := bShowState
 
         if accrate <> 0 and nAccelerationRate <> accrate
@@ -297,7 +296,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
                 finalupdate := false
 
         telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
-        telemetry.setcurrent(nLtAmps, nRtAmps)
+        telemetry.setcurrent(nLtmAmps, nRtmAmps)
         'if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, floating point comparisons do not work
         if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
