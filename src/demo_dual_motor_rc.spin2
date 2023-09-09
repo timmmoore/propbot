@@ -26,6 +26,8 @@
 ''   Updated.... 4 Sept 2023 (timmoore)
 ''                              force speed to 0 when joysticks are disabled
 ''                              add deadband to speed, if very slow bot jerks, so have a minimum speed
+''   Updated.... 8 Sept 2023 (timmoore)
+''                              connect VRA to setacceleration
 ''
 '' =================================================================================================
 
@@ -242,6 +244,11 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
                 debug("  ltmA=", sdec_(nLtAmps/10), ".", sdec_(nLtAmps//10), ", rtmA=", sdec_(nRtAmps/10), ".", sdec_(nRtAmps//10))
                 debug("  ltmW=", sdec_(nLtWatts), ", rtmW=", sdec_(nRtWatts))
             bLastShowState := bShowState
+
+        if accrate <> 0 and nAccelerationRate <> accrate
+            nAccelerationRate := accrate
+            debug("  Setting Motor Acceleration:", sdec(nAccelerationRate))
+            wheels.setAcceleration(nAccelerationRate)
 
         if bEmerCutoff <> bLastEmerCutoff
             'debug("  NEW E VALUE")

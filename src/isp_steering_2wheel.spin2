@@ -10,6 +10,8 @@
 ''   Updated.... 21 Jul 2022
 ''   Updated.... 26Aug-2Sep 2023 (timmoore)
 ''                              change calcPowerforDirection to better handle small direction changes
+''   Updated.... 8 Sept 2023 (timmoore)
+''                              sync the 2 motors: start and driveAtPower
 ''
 '' =================================================================================================
 CON { forward our interface constants }
