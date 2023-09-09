@@ -248,9 +248,9 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     '   ramp_min - start ramping at this value
     '   ramp_max - max ramping at this value, once reach this value, keep incrementing with this value
     '   ramp_inc - ramping increment, added to ramp_min every 500us. Effectively defines the acceleration
-    ramp_max := 200_000                                 ' 50k angle increment/decrement: add/sub this every 500 uSec to ramp up to speed, or ramp down to zero
-    ramp_min := 1_500                                   ' 1k5 angle increment: add/sub this every 500 uSec to ramp up from zero (slower initial ramp so we don't fault)
-    ramp_inc := 22                                      ' initial increment to ramping speed, added to ramp_min every 500us until ramp_max reached
+    ramp_max := 200_000                                 ' 200k angle max increment/decrement
+    ramp_min := 1_500                                   ' 1k5 angle min increment: start add this every 500 uSec to ramp up from zero
+    ramp_inc := 22                                      ' increment to ramping speed, add to ramp_min every 500us until ramp_max reached
     ramp_down := 50_000                                 ' fixed ramp down speed
 
     motorIsReversed := FALSE                            ' by default our motor direction is not reversed
@@ -2208,7 +2208,6 @@ hall_angles     LONG    0           '-%000- can't happen forward-direction table
 
 tmpX            res 1           ' miscellaneous
 tmpY            res 1
-
 ' measurements
 drvrSrtTix      res 1
 ctrlSrtTix      res 1
@@ -2227,7 +2226,7 @@ ramp_curr       res 1           ' current ramping up value
 angle_          res 1           ' current driver angle
 prior_angle     res 1           ' prior driver angle
 fwdrev          res 1           ' driver current direction used for indexing into hall angle table
-driveoff        res 1
+driveoff        res 1           ' pwm enabled (0) or disabled (1)
 curr_stop       res 1           ' current stop mode
 ' debug variables
 {
