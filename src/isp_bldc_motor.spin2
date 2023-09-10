@@ -985,6 +985,9 @@ PRI setTargetAccel(nTgtIncr, sync) | inincr
     debug("-MOT- ", sdec_long(inincr), " ", uhex_long(nTgtIncr), " ", sdec_(nTgtIncr>>31), " ", sdec_long(ramp_max), " ", sdec_long(ramp_min))
     'tvTargetIncreInM := nTgtIncr / 10_000
 
+PUB SyncStatus()
+    repeat while targetIncre & $8000_0000
+
 PRI motorVoltage(eSelectedPower) : fVolts | index
     if (index := lookdown(eSelectedPower:PWR_6p0V..PWR_25p9V)) <> 0
         fVolts := lookup(index: 6.0, 7.4, 11.1, 12.0, 14.8, 18.5, 22.2, 24.0, 25.9)
@@ -1756,7 +1759,6 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                                                             ' have start
 .dospinup
                 mov     drv_state_, #DCS_SPIN_UP            ' We are going to ramp up
-                mov     ramp_curr, ramp_min_                ' set initial ramp
                 jmp     #.rampUp                            ' now go ramp up!
 
 .doSpdChange
@@ -1807,7 +1809,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
 ' ------------------------------------
 .rampUp
                 ' if we don't have it, preset our starting angle (assume motor moved during float!)
-    if_z        or      drv_incr, drv_incr          wz      ' -and- are we stopped, just about to spin up?
+                or      drv_incr, drv_incr          wz      ' -and- are we stopped, just about to spin up?
     if_z        mov     ramp_curr, ramp_min_                ' set initial ramp if starting from 0
     if_z        call    #.checkstopfloaton                  ' make sure drive is on according to stop mode
                                                             ' if we are at target, stop the ramp effort
@@ -1833,6 +1835,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
     if_c_and_z  subs    drv_incr, final_ramp                ' NO, add remaining final delta
                 jmp     #.justIncr                          ' increment motor angle, then exit
 .endRUpAtSpeed
+                'debug("DRV=: ", sdec_(tgt_incr), " ", sdec_(drv_incr), " ", sdec_(ramp_curr))
                 mov     drv_state_, #DCS_AT_SPEED           ' YES, show we got to desired speed!
                 jmp     #.endRqst                           ' motor AT_SPEED, just exit (w/o increment)
 
@@ -1883,6 +1886,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 '  from the current driver target to ZERO!
 .moreSlow
                 or      drv_incr, drv_incr          wz  ' Q: stopped?
+    if_z        mov     ramp_curr, ramp_min_            ' set initial ramp if starting from 0
     if_z        jmp     #.dospinup                      ' yes, go start rampUp
                                                         ' calculate how far we are from desired
                 mov     final_ramp, drv_incr            ' compute our delta from curr to 0
@@ -1893,7 +1897,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
 ' -------------------------------------------------------------------------
 .justIncr       ' just do our increment of angle and we're done!
                 add     angle_, drv_incr
-'                debug("DRV: ", uhex_(drive_pins), " A:(", sdec_(angle_), ") += DI:(", sdec_(drv_incr), ")")
+                'debug("DRV: ", uhex_(tgt_incr), " A:(", sdec_(angle_), ") += DI:(", sdec_(drv_incr), ") ", sdec_(curr_ramp), " ", sdec_(final_ramp), " ", sdec_(drv_state_))
 
 .endRqst
                 getct   loop_ctcks_                     ' how long was this pass? send to host
@@ -2043,6 +2047,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
 
                 abs     tmpY, err_                      ' fault?
                 cmp     tmpY, #125                  wc  ' up to ~176deg differ from requested?
+                testb   driveoff, #0                orc ' if driveoff is 1 then ignore fault
     if_c        jmp     #.noFault
                 call    #.driveoff                      ' at FAULT: disable pwm output
                 mov     drv_state_, #DCS_FAULTED        '  also on FAULT: mark our motor as FAULTED
@@ -2072,6 +2077,8 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 testb   tgt_incr, #31               wc  ' bit 31 is used to carry sync info
     if_c        pollatn                             wz  ' need to sync, but dont want to wait so if atn not ready
     if_c_and_nz mov     tgt_incr, sv_tgt_incr           ' reset tgt_incr, if wanting atn and not received it yet
+    if_c_and_z  and     tgt_incr, ##$7fff_ffff
+    if_c_and_z  wrlong  tgt_incr, ptra[-1]              ' let caller know we have taken it
     _ret_       signx   tgt_incr, #30                   ' sign extend back to normal tgt_incr
 
 .driveinit                                              ' init drive pwm
@@ -2087,7 +2094,9 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
 .checkstopfloaton                                       ' set drive enabled according to stop mode
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: what is stop mode, should motor be freewheeling?
     if_z        call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
-    _ret_       mov     driveoff, #0                    ' drive pwm output enabled
+    if_z        mov     duty_, duty_min_                ' reset duty
+                mov     driveoff, #0                    ' drive pwm output enabled
+                ret
 
 .checkstopfloatoff                                      ' set drive disabled according to stop mode
                 skip    #%10                            ' same as checkstop without initAngleFmHall
