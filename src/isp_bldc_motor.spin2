@@ -329,6 +329,7 @@ VAR { * user request values * }
                                                         ' values specific to user selected motor
     LONG    degrPerTic
     LONG    hallTicsPerRotation
+    LONG    pwm_limit                                   ' max freq of our pwm
 
     BYTE    motorId[MOTOR_ID_STRLEN+1]
 
@@ -339,7 +340,20 @@ PUB testSetMotorId(pIDStr)
 PUB setAcceleration(rate)
 '' Limit Acceleration to {rate} where {rate} is [??? - ???] mm/s squared (default is ??? mm/s squared)
   ' need to convert from units to ramp increment
-    ramp_inc := rate
+    setRampingValues(ramp_min, ramp_max, rate, ramp_down)
+
+PUB setRampingValues(min_, max_, inc_, down_)
+'' Change the ramping parameters
+    ramp_min := min_
+    ramp_max := max_
+    ramp_inc := inc_
+    ramp_down := down_
+
+PUB getRampingValues() : min_, max_, inc_, down_
+    min_ := ramp_min
+    max_ := ramp_max
+    inc_ := ramp_inc
+    down_ := ramp_down
 
 PUB setMaxSpeed(speed) | limitSpeed
 '' Limit top-speed to {speed} where {speed} is [1 to 100]  (default is 75)
@@ -1541,13 +1555,13 @@ VAR  {  Motor Parameters  }
     LONG    duty_up
     LONG    duty_dn
     LONG    dead_gap        ' delay between driving h/l side of driver (never drive both at once)
-    LONG    pwm_limit       ' max freq of our pwm
+    LONG    ramp_down       ' angle decrement when slowing down
     LONG    cfg_ctcks       ' # clock ticks needed to create 2 kHz motor drive loop
     LONG    stop_mode       ' control / user setting, enum: [SM_FLOAT, SM_BRAKE]
     LONG    e_stop          ' T/F where T means stop all motor function
-    LONG    ramp_max        ' 12_500-18.5V 50k angle increment: add this every 500 uSec to ramp up fast to speed
-    LONG    ramp_min        ' 12_500-18.5V 12k angle increment: add this every 500 uSec to ramp up slow initially to speed
-    LONG    ramp_inc        ' when ramping down
+    LONG    ramp_max        ' angle increment: max rap up every 500 uSec
+    LONG    ramp_min        ' angle increment: start of ramp up every 500 uSec
+    LONG    ramp_inc        ' angle increment: inc every 500uSec from min to max
 
 ' -----------------------------------
     LONG    frame_cnt       ' clock-tics for period of PWM_RATE_IN_HZ
@@ -1594,12 +1608,12 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 wxpin   fram, drive_pins                    '  and set PWM frame width, too, matches adc period
                 wypin   #0, drive_pins                      ' make sure pwm is off
 
-                ' ADC setup 1
+                ' ADC setup - GIO level
                 wrpin   adc_modes+0, adc_pins               ' switch ADC to GIO calibration
                 wxpin   adc_fram, adc_pins                  ' set count period to match our PWM frame width
                 wypin   #0, adc_pins
 
-                dirh    all_pins                            ' enable ADC and PWM pins to use adc, they will be restarted later for drive loop
+                dirh    adc_pins                            ' enable ADC pins to use adc
 
                 call    #.wait4adc                          ' allow ADC rest period (wait for sample ready)
 
@@ -1608,8 +1622,10 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 rdpin   gio_levels+2, pin_adc_w_i
                 rdpin   gio_levels+3, pin_adc_cur_i
 
-                ' ADC setup 2
+                ' ADC setup - VIO level
+                dirl    adc_pins                            ' disable ADC pins for configuration
                 wrpin   adc_modes+1, adc_pins               ' switch ADC to VIO calibration
+                dirh    adc_pins                            ' enable ADC to use adc
 
                 call    #.wait4adc                          ' allow ADC rest period (wait for sample ready)
 
@@ -1634,8 +1650,9 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 getqx   scl_levels+3
 
                 ' finally, configure the current sense pins for main loop
-                dirl    all_pins                            ' disable ADC pins for configuration
+                dirl    adc_pins                            ' disable ADC pins for configuration
 
+                ' ADC setup for actual values
                 wrpin   adc_modes+2, adc_pins               ' switch ADC to pin sampling
 
                 testb   sync_required, #0           wc      ' do we need to wait for attention?
@@ -1652,7 +1669,6 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 mov     sv_tgt_incr, #0                     ' just in case
                 mov     fwdrev, #0                          ' just in case
                 mov     angle_, #0                          ' just in case
-'                mov     prior_angle_, #0                    ' just in case, test
 
                 ' do initial read of parms so control loop can use them
                 setq    #DRVR_PARAMS_LONGS_COUNT-1      ' load fresh parameter table (13 DRVR_PARAMS_LONGS_COUNT longs)
@@ -1738,7 +1754,6 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 mov     drv_incr, #0                        ' reset incr to stopped
                 mov     prior_incr, #0                      ' reset prior
                 mov     fwdrev, #0                          ' just in case
-                mov     duty_, duty_min_                    ' just in case
                 mov     angle_, #0                          ' just in case
                 mov     drv_state_, #DCS_STOPPED            ' reset fault -> to stopped
                                                             ' drive_pins were floated when detect fault
@@ -1858,7 +1873,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
     if_z        testbn  drv_incr, #31               wc      ' YES, moving FWD or REV? (bCY=FWD)
     if_nz       testbn  tgt_incr, #31               wc      ' NO, moving FWD or REV? (bCY=FWD)
 .havefast
-                mov     curr_ramp, ramp_down                ' we want to ramp down
+                mov     curr_ramp, ramp_down_               ' we want to ramp down
                 jmp     #.havefast1                         ' jmp to previous ramping code
 .endRDnAtTgt
                 ' AT TARGET now adjust state
@@ -2064,7 +2079,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
 
                 setq    #DRVR_STATUS_LONGS_COUNT-1      ' write drive[3]/sense[4]/hall/pos/duty/err/ticks[2]/state to hub
                 wrlong  drive_u_, ptra
-.loop           jnct1   #.ctlMotor                      ' if not time for control loop just go to drive loop
+.loop           jnct1   #.ctlMotor                      ' if not time for drv loop just go to ctl loop
                 jmp     #.drvMotor
 
 ' =========================================================================
@@ -2096,7 +2111,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 skip    #%001100                        ' same as checkstop without initAngleFmHall and duty reset
 .checkstop                                              ' set drive disabled to correct state
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: what is new stop mode, should motor be freewheeling?
-                modz    _nz                         wz  ' invert Z, allowing skipping invert by floaton
+                modz    _nz                         wz  ' invert Z, allows skipping invert by floaton
     if_z        call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
     if_z        mov     duty_, duty_min_                ' reset duty
     if_z        mov     driveoff, #0                    ' drive pwm output enabled
@@ -2137,7 +2152,6 @@ bias            LONG    0                       ' PWM center-frame bias [was: LO
 third           LONG    1 FRAC 3                ' 120 degrees
 numerator       LONG    3300 << 11              ' numerator for ADC calculations, configured from init to match the adc_fram count rather than 1 << 11
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
-ramp_down       LONG    50_000                  ' ramping down decrement
 sync_required   LONG    0                       ' non zero if motor loop should wait to start
 
 ' -----------------------------------
@@ -2224,9 +2238,9 @@ sv_tgt_incr     res 1           ' holding area for prior value
 ' control loop variables
 drv_incr        res 1           ' current driver increment
 ' ramp up rate, down is always fast
-curr_ramp       res 1
-final_ramp      res 1
-ramp_curr       res 1           ' current ramping up value
+curr_ramp       res 1           ' ramp to add/sub from drv_incr
+final_ramp      res 1           ' from current to target
+ramp_curr       res 1           ' current ramping up value, ramps up from ramp_min_ to ramp_max_
 ' driver actual
 angle_          res 1           ' current driver angle
 prior_angle     res 1           ' prior driver angle
@@ -2245,7 +2259,7 @@ prior_drv_      res 1
 ' used when tracking down PWM drive problem...
 'driveUsav_      res 1          ' unmodified value from cordic math
 
-' PIN names -  single-pin variables
+' PIN names -  single-pin variables, 14 pins, pwm x is not used
 pin_adc_u_i     res 1           ' basepin + 0
 pin_adc_v_i     res 1           ' basepin + 1
 pin_adc_w_i     res 1           ' basepin + 2
@@ -2271,13 +2285,13 @@ scl_levels      res 4
 params_ptr_ res 1               ' params_ptr must be followed by:
 offset_fwd_ res 1               '  14 (DRVR_PARAMS_LONGS_COUNT) parameters
 offset_rev_ res 1
-duty_min_   res 1
-duty_max_   res 1
-duty_up_    res 1
-duty_dn_    res 1
-dead_gap_   res 1               ' this was OFFSET but now passed into driver
-pwm_limit_  res 1               ' this was PWMLIM but now passed into driver
-cfg_ctcks_  res 1
+duty_min_   res 1               ' minimum duty cycle for pwm
+duty_max_   res 1               ' maximum duty cycle for pwm
+duty_up_    res 1               ' up rate for duty cycle for pwm
+duty_dn_    res 1               ' down rate for duty cycle for pwm
+dead_gap_   res 1               ' gap between driving high and low side pwm
+ramp_down_  res 1               ' angle decrement when slowing down
+cfg_ctcks_  res 1               ' clocks for drv loop
 stop_mode_  res 1               ' float or brake mode
 e_stop_     res 1               ' T/F where T means stopal motor function
 ramp_max_   res 1               ' angle increment: max rap up every 500 uSec
