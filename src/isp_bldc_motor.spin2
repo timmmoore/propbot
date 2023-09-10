@@ -1572,10 +1572,10 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 add     adc_pins, tmpX                      '  finish the adc-pins variable
 
                 mov     tmpY, #0                            ' make the single-pin variables
-.pin            altd    tmpY, #pin_adc_u_i
+.pin            altd    tmpY, #pin_adc_u_i                  ' only 14, dont use last 2
                 mov     0-0, tmpX
                 add     tmpX, #1
-                incmod  tmpY, #15                   wc
+                incmod  tmpY, #13                   wc
     if_nc       jmp     #.pin
 
                 rdlong  params_ptr_, ptra++                 ' get parameters pointer
@@ -1584,14 +1584,14 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
 
                 dirl    all_pins                            ' disable PWM and ADC pins for configuration
 
-                wrpin   pwmn, pin_pwm_u_l                   ' set up PWM pins
-                wrpin   pwmt, pin_pwm_u_h
+                wrpin   pwmn, pin_pwm_u_l                   ' set up PWM pins, low side is inverted
+                wrpin   pwmt, pin_pwm_u_h                   ' high side is not inverted
                 wrpin   pwmn, pin_pwm_v_l
                 wrpin   pwmt, pin_pwm_v_h
                 wrpin   pwmn, pin_pwm_w_l
                 wrpin   pwmt, pin_pwm_w_h
 
-                wxpin   fram, drive_pins                    '  and set PWM frame width, too
+                wxpin   fram, drive_pins                    '  and set PWM frame width, too, matches adc period
                 wypin   #0, drive_pins                      ' make sure pwm is off
 
                 ' ADC setup 1
@@ -1599,7 +1599,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 wxpin   adc_fram, adc_pins                  ' set count period to match our PWM frame width
                 wypin   #0, adc_pins
 
-                dirh    all_pins                            ' enable ADC and PWM pins simultaneously for phase-locked operation
+                dirh    all_pins                            ' enable ADC and PWM pins to use adc, they will be restarted later for drive loop
 
                 call    #.wait4adc                          ' allow ADC rest period (wait for sample ready)
 
@@ -1642,7 +1642,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
     if_c        waitatn                                     ' Y: wait to be atn by caller
 
                 call    #.driveinit                         ' enable ADC and PWM pins simultaneously for phase-locked operation
-
+                                                            ' from now on, the adc and pwm run continously
                 mov     pos_, #0                            ' reset pos
                 mov     loop_dtcks_, #0                     ' just in case
                 mov     loop_ctcks_, #0                     ' just in case
@@ -1963,14 +1963,14 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
 
                 mov     tmpY, duty_                     ' feed three CORDIC operations to get phase drive levels
                 shr     tmpY, #4
-                mov     tmpX, angle_
+                mov     tmpX, angle_                    ' requested angle
                 qrotate tmpY, tmpX
-                add     tmpX, third
+                add     tmpX, third                     ' 120 degrees further
                 qrotate tmpY, tmpX
-                add     tmpX, third
+                add     tmpX, third                     ' 240 degress further
                 qrotate tmpY, tmpX
 
-                getqy   drive_u_                        ' get three CORDIC results
+                getqy   drive_u_                        ' get three CORDIC results, duty/16*cos(angle_+N*120degree) (N->0,1,2)
                 getqy   drive_v_
                 getqy   drive_w_
                                                         ' used when tracking down PWM drive problem...
@@ -1992,18 +1992,19 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 sar     tmpX, #1
 
                 sub     drive_u_, tmpX                  ' subtract difference from drive levels
-                sub     drive_v_, tmpX
+                sub     drive_v_, tmpX                  ' offset round the average drive pwm
                 sub     drive_w_, tmpX
 
                 add     drive_u_, bias                  ' add center-bias and dead-time offsets to update PWMs
-                add     drive_v_, bias
-                add     drive_w_, bias
-
+                add     drive_v_, bias                  ' center around the triangle counter
+                add     drive_w_, bias                  ' counter counts down to 0 and then up during fram period
+                                                        ' when counting down and counter == y value, out turns on and off when counting up and counter == value
+                                                        ' pwm config of output inverted or not-inverted. low side is inverted, high side is not
                 testb   driveoff, #0                wc  ' if driveoff is 0 then drive is enabled, else drive should be disabled
     if_c        wypin   #0, drive_pins                  ' make sure pwm is off and all drive pins low
-                add     drive_u_, dead_gap_             ' dead-gap was OFFSET
-    if_nc       wypin   drive_u_, pin_pwm_u_l
-                sub     drive_u_, dead_gap_             ' dead-gap was OFFSET
+                add     drive_u_, dead_gap_             ' make sure low side turns off (inverted) earlier than high side turns on (non-inverted)
+    if_nc       wypin   drive_u_, pin_pwm_u_l           ' safety on driver board make sure high side off if both low and high side are high, in case of an error
+                sub     drive_u_, dead_gap_             ' shouldn't happen with dead-gap
     if_nc       wypin   drive_u_, pin_pwm_u_h
 
                 add     drive_v_, dead_gap_             ' dead-gap was OFFSET
@@ -2035,23 +2036,20 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 mov     prior_angle, angle_
 
                 testb   fwdrev, #0                  wc  ' determine error
-                bitc    hall_, #3
-                and     hall_, #%1111
+                bitc    hall_, #3                       ' forward or reverse half of the hall_angles table
+                and     hall_, #%1111                   ' remove hall input from last time to stay in bounds
                 alts    hall_, #hall_angles
                 mov     err_, 0-0
-    if_c        add     err_, offset_fwd_
+    if_c        add     err_, offset_fwd_               ' hall sensor offsets
     if_nc       add     err_, offset_rev_
-                subr    err_, angle_
+                subr    err_, angle_                    ' difference from requested angle
                 sar     err_, #24
-                bitl    hall_, #3
-
-                abs     tmpY, err_                      ' fault?
-                cmp     tmpY, #125                  wc  ' up to ~176deg differ from requested?
-                testb   driveoff, #0                orc ' if driveoff is 1 then ignore fault
-    if_c        jmp     #.noFault
-                call    #.driveoff                      ' at FAULT: disable pwm output
-                mov     drv_state_, #DCS_FAULTED        '  also on FAULT: mark our motor as FAULTED
-                wrlong  maxNeg, ptra[DRVR_STATUS_LONGS_COUNT] '  also on FAULT: report fault
+                abs     tmpY, err_                      ' fault? tmpY is absolute difference from hall angle to requested angle
+                cmp     tmpY, #125                  wc  ' less than ~176deg differ from requested? is ok
+                testb   driveoff, #0                orc ' if driveoff is 1 then ignore fault, i.e., manually moving wheel
+    if_nc       call    #.driveoff                      ' at FAULT: disable pwm output
+    if_nc       mov     drv_state_, #DCS_FAULTED        '  also on FAULT: mark our motor as FAULTED
+    if_nc       wrlong  maxNeg, ptra[DRVR_STATUS_LONGS_COUNT] '  also on FAULT: report fault
 
 .noFault        sub     tmpY, #256/6                wc  ' modulate duty (256 frac 6 - where 6 is # of hall cycles)
     if_nc       muls    tmpY, duty_up_
@@ -2077,34 +2075,32 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 testb   tgt_incr, #31               wc  ' bit 31 is used to carry sync info
     if_c        pollatn                             wz  ' need to sync, but dont want to wait so if atn not ready
     if_c_and_nz mov     tgt_incr, sv_tgt_incr           ' reset tgt_incr, if wanting atn and not received it yet
-    if_c_and_z  and     tgt_incr, ##$7fff_ffff
-    if_c_and_z  wrlong  tgt_incr, ptra[-1]              ' let caller know we have taken it
+    if_c_and_z  bitl    tgt_incr, #31                   ' have the atn, so
+    if_c_and_z  wrlong  tgt_incr, ptra[-1]              ' let caller know we have taken it by clearing sync bit
     _ret_       signx   tgt_incr, #30                   ' sign extend back to normal tgt_incr
 
 .driveinit                                              ' init drive pwm
                 dirh    all_pins                        ' enable ADC and PWM pins simultaneously for phase-locked operation
+                                                        ' the ADC and PWM smart pins are never disabled after this.
                 dirl    pin_hall_u                      ' make sure HALL pins are inputs
                 dirl    pin_hall_v
                 dirl    pin_hall_w
-    _ret_       mov     driveoff, #0                    ' drive pwm output enabled
+    _ret_       mov     driveoff, #0                    ' drive pwm output enabled, though checkstop is called before ctlMotor loop and may change this
 
 .driveoff                                               ' disable pwm always
     _ret_       mov     driveoff, #1                    ' drive pwm output disabled
 
 .checkstopfloaton                                       ' set drive enabled according to stop mode
-                cmp     stop_mode_, #SM_FLOAT       wz  ' Q: what is stop mode, should motor be freewheeling?
-    if_z        call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
-    if_z        mov     duty_, duty_min_                ' reset duty
-                mov     driveoff, #0                    ' drive pwm output enabled
-                ret
-
+                skip    #%1000101                       ' same as inverted floatoff without drive disable
 .checkstopfloatoff                                      ' set drive disabled according to stop mode
-                skip    #%10                            ' same as checkstop without initAngleFmHall
+                skip    #%001100                        ' same as checkstop without initAngleFmHall and duty reset
 .checkstop                                              ' set drive disabled to correct state
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: what is new stop mode, should motor be freewheeling?
-    if_nz       call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
-    if_nz       mov     driveoff, #0                    ' drive pwm output enabled
-    if_z        mov     driveoff, #1                    ' drive pwm output disabled
+                modz    _nz                         wz  ' invert Z, allowing skipping invert by floaton
+    if_z        call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
+    if_z        mov     duty_, duty_min_                ' reset duty
+    if_z        mov     driveoff, #0                    ' drive pwm output enabled
+    if_nz       mov     driveoff, #1                    ' drive pwm output disabled
                 ret
 
 .wait4adc
@@ -2264,8 +2260,6 @@ pin_pwm_v_l     res 1           ' basepin + 10
 pin_pwm_v_h     res 1           ' basepin + 11
 pin_pwm_w_l     res 1           ' basepin + 12
 pin_pwm_w_h     res 1           ' basepin + 13
-pin_pwm_x_l     res 1           ' basepin + 14
-pin_pwm_x_h     res 1           ' basepin + 15
 
 '  ADC variables
 gio_levels      res 4
@@ -2310,7 +2304,7 @@ drv_state_  res 1               ' enum: DCS_STOPPED, DCS_SPIN_UP, DCS_AT_SPEED, 
 ' fault is here... (but external only)
 
 ' $1f8 for reg cogs
-    fit     496  ' 448 currently works
+    fit     496  ' 443 currently works
 
 CON { license }
 {{
