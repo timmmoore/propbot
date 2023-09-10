@@ -244,11 +244,6 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
                 debug("  ltmW=", sdec_(nLtmWatts), ", rtmW=", sdec_(nRtmWatts))
             bLastShowState := bShowState
 
-        if accrate <> 0 and nAccelerationRate <> accrate
-            nAccelerationRate := accrate
-            debug("  Setting Motor Acceleration:", sdec(nAccelerationRate))
-            wheels.setAcceleration(nAccelerationRate)
-
         if bEmerCutoff <> bLastEmerCutoff
             'debug("  NEW E VALUE")
             if bEmerCutoff
