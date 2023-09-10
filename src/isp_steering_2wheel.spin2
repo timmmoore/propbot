@@ -219,7 +219,7 @@ PUB driveAtPower(leftPower, rightPower)
     ltWheel.driveAtPowerEx(rqstLtPower, true)
     rtWheel.driveAtPowerEx(rqstRtPower, true)
     cogatn(cogmask)                                     ' sync the 2 motor cogs
-    ltWheel.SyncStatus()                                ' make syre both motors have taken value
+    ltWheel.SyncStatus()                                ' make sure both motors have taken value
     rtWheel.SyncStatus()
 
 {
