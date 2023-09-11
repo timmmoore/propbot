@@ -1350,7 +1350,7 @@ PUB updateSenseData(nHallCntsIn8thSec, nHallWindowSum)
 
     tvMaxSenseI := max(sense_i_mV, tvMaxSenseI)
     ' power calcs
-    tv_mA := sense_i_mV/rSenseForBoard)                                         ' in multiples of 0.1mA
+    tv_mA := sense_i_mV/rSenseForBoard                                         ' in multiples of 0.1mA
     tv_mW := round((float(tv_mA) *. fMotorVolts)/. F_SCALE_WATTS)               ' in mW
 
     if user.MOTOR_TYPE == MOTR_6_5_INCH
@@ -2113,7 +2113,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 cmp     stop_mode_, #SM_FLOAT       wz  ' Q: what is new stop mode, should motor be freewheeling?
                 modz    _nz                         wz  ' invert Z, allows skipping invert by floaton
     if_z        call    #.initAngleFmHall               ' make sure angle set correctly, so motor doesn't jerk when enters ctlMotor
-    if_z        mov     duty_, duty_min_                ' reset duty
+    if_z        mov     duty_, duty_min_                ' reset duty, reduces jerk if not fully aligned
     if_z        mov     driveoff, #0                    ' drive pwm output enabled
     if_nz       mov     driveoff, #1                    ' drive pwm output disabled
                 ret
