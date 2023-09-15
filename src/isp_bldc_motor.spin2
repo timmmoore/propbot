@@ -1901,7 +1901,6 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
                 '  from the current driver target to ZERO!
 .moreSlow
                 or      drv_incr, drv_incr          wz  ' Q: stopped?
-    if_z        mov     ramp_curr, ramp_min_            ' set initial ramp if starting from 0
     if_z        jmp     #.dospinup                      ' yes, go start rampUp
                                                         ' calculate how far we are from desired
                 mov     final_ramp, drv_incr            ' compute our delta from curr to 0
