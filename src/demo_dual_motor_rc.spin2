@@ -63,7 +63,7 @@ CON { fixed io pins }
   BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
   DEADBAND                      = 1                             ' ignore speeds slower than this
-  MOTOROFFONIGNOREJOYSTICK      = true
+  MOTOROFFONIGNOREJOYSTICK      = true                          ' disable motor if joystick ignore switch is set
 
 OBJ { our Drive Subsystem }
 
@@ -99,7 +99,7 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
 
         ' override defaults, use 100 %
         wheels.setMaxSpeed(100)
-        'wheels.setMaxSpeedForDistance(100)
+        wheels.setMaxSpeedForDistance(100)
         ' just don't draw current at stop
         wheels.holdAtStop(false)
 
@@ -137,7 +137,6 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
 
     debug("* DONE")
 
-{
 PRI waitUntilMotorReady()
     if wheels.isReady() == false
         debug("* wait motors ready...")
@@ -166,7 +165,6 @@ PRI waitUntilMotorDone()
             else
                 waitms(2)
     debug("* Motors stopped!")
-'}
 
 CON
 
@@ -189,7 +187,7 @@ VAR
     long    bLastShowDriveStates
     long    nAccelerationRate
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,} bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate, accrate
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate, accrate
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -211,7 +209,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
     bLastEmerCutoff := VALUE_NOT_SET                    ' value can't happen
     bLastShowDriveStates := VALUE_NOT_SET               ' value can't happen
 
-    'loopCt := 0
+    loopCt := 0
     repeat
         'debug("* ", udec_long(loopCt))
         bShowDebugStatus := FALSE or bMinBattery 'loopCt < 2 ? TRUE : FALSE
@@ -237,9 +235,9 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
                 wheels.showDriveStates()
             bLastShowDriveStates := bShowDriveStates
 
-        nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
         if bShowState <> bLastShowState
             if bShowState
+                nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
                 debug("  ltmA=", sdec_(nLtmAmps/10), ".", sdec_(nLtmAmps//10), ", rtmA=", sdec_(nRtmAmps/10), ".", sdec_(nRtmAmps//10))
                 debug("  ltmW=", sdec_(nLtmWatts), ", rtmW=", sdec_(nRtmWatts))
             bLastShowState := bShowState
@@ -303,7 +301,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, {loopCt,}
             quit
 
         waitms(250) ' wait 1/4 second, before next loop
-        'loopCt++
+        loopCt++
 
     ' done, stop our motors
     wheels.stop()
@@ -366,7 +364,7 @@ CON { license }
  -------------------------------------------------------------------------------------------------
   MIT License
 
-  Copyright (c) 2022 Iron Sheep Productions, LLC
+  Copyright (c) 2023 Iron Sheep Productions, LLC
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
