@@ -2022,6 +2022,7 @@ driver          mov     drv_state_, #DCS_STOPPED            ' motor is currently
     if_nc       add     err_, offset_rev_
                 subr    err_, angle_                    ' difference from requested angle
                 sar     err_, #24
+
                 abs     tmpY, err_                      ' fault? tmpY is absolute difference from hall angle to requested angle
                 cmp     tmpY, #125                  wc  ' less than ~176deg differ from requested? is ok
                 testb   driveoff, #0                orc ' if driveoff is 1 then ignore fault, i.e., manually moving wheel
@@ -2116,7 +2117,6 @@ bias            LONG    0                       ' PWM center-frame bias [was: LO
 third           LONG    1 FRAC 3                ' 120 degrees
 numerator       LONG    3300 << 11              ' numerator for ADC calculations, configured from init to match the adc_fram count rather than 1 << 11
 maxNeg          LONG    $FFFF_FFFF              ' 32-bits of one (max negative signed value)
-
 sync_required   LONG    0                       ' non zero if motor loop should wait to start
 
 ' -----------------------------------
