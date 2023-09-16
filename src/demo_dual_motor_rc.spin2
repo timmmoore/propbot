@@ -13,7 +13,7 @@
 ''                              add frsky s.port (pin 54) telemetry
 ''                                send motor current telemetry
 ''                              add resistor divider and ADC
-''                                      22.2V input to 5V convertor
+''                                      22.2V input to 5V convertor input
 ''                                      |
 ''                                      20K (19K93, 0.35%)
 ''                                      |______________
@@ -25,7 +25,7 @@
 ''                              stop motors and shutdown if min battery reached
 ''   Updated.... 4 Sept 2023 (timmoore)
 ''                              force speed to 0 when joysticks are disabled
-''                              add deadband to speed, if very slow bot jerks, so have a minimum speed
+''                              add deadband to speed
 ''   Updated.... 8 Sept 2023 (timmoore)
 ''                              connect VRA to setAcceleration
 ''
