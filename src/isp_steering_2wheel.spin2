@@ -96,7 +96,7 @@ PUB start(leftBasePin, rightBasePin, driveVoltage, leftDetectMode, rightDetectMo
 '' Start our drive cogs connected to our left and right motor control pin-sets
     ticks1ms   := (clkfreq / 1_000)
     ticks1us   := (clkfreq / 1_000_000)
-    ticks125ms := ticks1ms * 125
+    ticks50ms  := ticks1ms * 50
 
     ' iff HDMI is needed, then we need this!
     'if clkfreq <> 270_000_000
@@ -512,14 +512,14 @@ CON { -- TASK position tracking -- }
 
     STACK_SIZE_LONGS = 64 ' WARNING! we exceed stack at 48!
 
-    ' at 125 ms
-    SENSE_LOOP_HZ = 8
+    ' at 50 ms
+    SENSE_LOOP_HZ = 20
 
 VAR { time values & arrays }
 
     long    ticks1ms
     long    ticks1us
-    long    ticks125ms
+    long    ticks50ms
 
     long    senseCog
 
@@ -582,7 +582,7 @@ PRI updateWindowAccumulators()
     rtWheel.updateWindowAccumulators()
 
 PRI taskPostionSense() | senseStartTicks, eStopState
-' TASK: every 1/8 Sec (8Hz) read motor pos and calculate RPM and countOf90ths/Sec
+' TASK: every 1/20 Sec (20Hz) read motor pos and calculate RPM and countOf90ths/Sec
     LAINIT()
 
     eStopState := false
@@ -609,7 +609,7 @@ PRI taskPostionSense() | senseStartTicks, eStopState
 
         ' if user set time/distance to stop then stop if we are past the time or distance
         ' if both time and distance is used, first check until time is passed and then check distance
-        if motorStopMSecs > 0 and (getms() > motorStopMSecs)
+        if motorStopMSecs <> 0 and (getms() +> motorStopMSecs)
             stopMotors()
             motorStopMSecs := 0 ' and clear user request
         elseif motorStopHallTicks > 0
@@ -632,8 +632,8 @@ PRI taskPostionSense() | senseStartTicks, eStopState
         deltaTicks := getct() - senseStartTicks
 
         ' code uses about 1_880 ticks. This is little over 9 uS  @200MHz clock
-        '   wait remainder of 125 mSec before next sample
-        waitct(senseStartTicks + ticks125ms)    ' wait to create "sense" time-base
+        '   wait remainder of 50 mSec before next sample
+        waitct(senseStartTicks + ticks50ms)                                     ' wait to create "sense" time-base
 
 PRI isEmergency() : bEmergencyState
 ' return T/F where T means one or both wheels are in emergency cutoff state
