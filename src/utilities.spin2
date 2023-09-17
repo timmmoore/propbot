@@ -1,0 +1,157 @@
+{Utilities
+                timmoore
+}
+
+OBJ
+'  serial        : "isp_serial_singleton_tmm"
+
+PUB null()
+  ' This is not a top-level object
+
+PUB wrapangles(angle1, angle2, maxangle) : deltaangle | d1
+  ' find the smallest angle between request and current angles, moving in either direction, allowing for wrapround
+  ' maxangle must be +ve
+  d1 := deltaangle := angle2 - angle1
+  if abs(deltaangle) > (maxangle>>1)
+    deltaangle := (deltaangle > 0)?-maxangle + deltaangle:+maxangle + deltaangle
+  'serial.fstr4(string("wrapangles c:%d s:%d %d %d\r"), angle1, angle2, d1, deltaangle)
+
+PUB map(value, inmin, inmax, outmin, outmax) : result
+'' Maps value in range inmin..inmax to new value in range outmin..outmax
+  value := inmin #> value <# inmax
+  result := (value - inmin) * (outmax - outmin) / (inmax - inmin) + outmin
+
+PUB clamp(input, tmaxinput) : s
+' +- max clamp
+  s := -tmaxinput #> input <# tmaxinput
+
+PUB fullclamp(input, tmininput, tmaxinput) : s
+' separate min and max clamping values
+  s := tmininput #> input <# tmaxinput                  ' greater= min; less= max
+
+PUB longcomp(p1, p2, count, diff, update) : retv
+' return true if p1 and p2 not the same with greater then diff delta
+  repeat retv from 0 to count-1
+    if abs(long[p1][retv] - long[p2][retv]) > diff
+      quit
+  if (retv := retv < count) && (update <> false)
+    longmove(p1, p2, count)
+
+PUB longcompf(p1, p2, count, diff, update) : retv
+' return true if p1 and p2 not the same with float precision with greater than diff delta
+  repeat retv from 0 to count-1
+    if frel(fabs(long[p1][retv] -. long[p2][retv]), diff, FGT)
+      quit
+  if (retv := retv < count) && (update <> false)
+    longmove(p1, p2, count)
+
+PUB maxlong(pinput, count, inc) : highest | index, temp
+' find maximum absolute value
+  repeat index from 0 to count-1 step inc
+    if (temp := abs(long[pinput][index])) > highest
+      highest := temp
+
+PUB swapbytes(val) : result
+' reverse order of bytes in a long
+  org
+    mov     result, val
+    movbyts result, #%%0123
+  end
+'
+CON
+  FLT           = $a2
+  FGT           = $a4
+  FNE           = $a6
+  FEQ           = $a8
+  FLTE          = $aa
+  FGTE          = $ac
+
+PUB frel(w, x, paa): r | y, _FFFFFFFF
+' floating point comparision, without spin interpreter bug
+  _FFFFFFFF~~
+  org
+
+                bitl    w,#31           wcz     'make left-side comparable
+                cmp     w,##$7F800001   wc      'NaN?
+        if_z    neg     w                       '+/- %0_xxxxxxxx_mmmmmmmmmmmmmmmmmmmmmmm
+        if_nc   skip    #%111
+
+                bitl    x,#31           wcz     'make right-side comparable
+                cmp     x,##$7F800001   wc      'NaN?
+        if_z    neg     x                       '+/- %0_xxxxxxxx_mmmmmmmmmmmmmmmmmmmmmmm
+
+        if_nc   skip    #%11111                 'if either NaN, return false
+
+                cmps    w,x             wcz     'do comparison
+        if_z    mov     y,#%1000                'equal?
+        if_nz   mov     y,#%0100                'above?
+        if_c    mov     y,#%0010                'below?
+                test    y,paa           wc      'test mask
+
+                muxc    r,_FFFFFFFF             'return boolean
+  end
+
+con
+  ' debug switches are 3 position switchs: 500, 1250 and 2000
+  DEBUG1_OUTPUT     =           500
+  DEBUG2_OUTPUT     =           1000
+  DEBUG3_OUTPUT     =           1200
+  DEBUG4_OUTPUT     =           2000
+
+  DEBUGNONE       = 0
+  DEBUGOUT1       = 1                                   ' lower position outputs DEBUG1_OUTPUT only
+  DEBUGOUT2       = 2
+  DEBUGOUT3       = 3                                   ' middle position outputs DEBUG1_OUTPUT-DEBUG3_OUTPUT
+  DEBUGOUT4       = 4                                   ' upper position outputs DEBUG1_OUTPUT-DEBUG4_OUTPUT
+
+PUB debugoutput(debug1, type) : retv
+  if type > 0 and type <= 4
+    retv := debug1 >= debugtypes[type-1]
+
+dat
+  debugtypes long  DEBUG1_OUTPUT, DEBUG2_OUTPUT, DEBUG3_OUTPUT, DEBUG4_OUTPUT
+
+PUB add64(xl, xh, x) : rxl, rxh
+' 64bit + 32bit signed add
+  longmove(@rxl, @xl, 2)
+
+  org
+    add   rxl, x                  wc
+    addsx rxh, #0
+  end
+
+pub cart_pol(x, y) : r, t
+'' Convert coordinate x,y to polar (length, angle (0.1deg))
+' from forums
+  org
+    qvector   x, y                                      ' cartesian to polar
+    getqx     r                                         ' get radius (length)
+    getqy     t                                         ' get theta (angle)
+    qdiv      t, ##1193046                              ' convert angle to 0.1 degree units, $ffffffff/1193046 -> 3600
+    getqx     t
+  end
+'
+con { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this
+  software and associated documentation files (the "Software"), to deal in the Software
+  without restriction, including without limitation the rights to use, copy, modify,
+  merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to the following
+  conditions:
+
+  The above copyright notice and this permission notice shall be included in all copies
+  or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+  PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+  HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+  OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+}}
