@@ -57,6 +57,9 @@ CON { fixed io pins }
   SBUS_RX  = 55  { I }                                          ' RC receiver SBUS channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver SPORT telemetry
 
+  LIDARTX       = 49
+  LIDARRX       = 50
+  LIDARCTL      = 51
 
   BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 20K + 3K
   BATTERY_LOW                   = 0
@@ -76,11 +79,12 @@ OBJ { our Drive Subsystem }
     remoteCtl   : "isp_flysky_rx"                   ' the FlySky Transmitter, 1 cog
     battery     : "jm_ez_analog"                    ' A2D to read battery voltage
     telemetry   : "frskysport"                      ' bidirectional serial port to RC receiver for telemetry, 1 cog
+    lidar       : "rplidar"                         ' rplidar A1M8, 1 cog
 
 VAR
-    long    remoteCog, telemetryCog
+    long    remoteCog, telemetryCog, lidarCog
 
-PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectModeLt, detectModeRt
+PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, motor, detectModeLt, detectModeRt
 '' DEMO Driving a two wheeled platform
 
     debug("* demo dual motor control via R/C")
@@ -117,9 +121,11 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
         battery.start(BATTERY_ANALOG, BATTERY_LOW, BATTERY_HIGH)
         remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
+        lidarCog := lidar.start(LIDARTX, LIDARRX, LIDARCTL)
         statusOK := remoteCog <> 0 ? TRUE : FALSE
         status1Ok := telemetryCog <> 0 ? TRUE : FALSE
-        if statusOK and status1Ok
+        status2Ok := lidarCog <> 0 ? TRUE : FALSE
+        if statusOK and status1Ok and status2Ok
             'remoteCtl.manualCalibrate()
             debug("R/C Running...")
             remoteControlMotor()
@@ -128,6 +134,8 @@ PUB main() | statusOK, status1OK, basePinLt, basePinRt, voltage, motor, detectMo
               debug("EEEE: SBUS rcvr not started?!")
             if status1OK == false
               debug("EEEE: SPORT not started?!")
+            if status2OK == false
+              debug("EEEE: LIDAR not started?!")
 
         telemetry.stop()
         ' turn off our SBUS drivers
