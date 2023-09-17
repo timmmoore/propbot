@@ -1,0 +1,362 @@
+{RoboPeak RPLIDAR A1M8}
+{
+        4pin      5V, Gnd, tx, rx (tx/rx are 3.3V)
+        3pin      5V, Gnd, control (bs170 mosfet)
+
+
+               3V3
+               |
+               fan
+               |
+          G  |-|D
+       ------|
+             |-|S
+               |
+               |
+               Gnd
+
+}
+
+CON
+
+  LIDARRX                       = P_ASYNC_RX
+  LIDARTX                       = P_ASYNC_TX | P_OE
+  MOTOR_OFF                     = P_NORMAL | P_LOW_15K | P_OE  ' make sure output held weakly low
+  MOTOR_ON                      = P_NORMAL | P_HIGH_1K5 | P_OE ' drive a mosfet to control motor
+
+  LIDAR_BITS                    = 8
+  LIDAR_BAUD                    = 115200
+
+  STACK_SIZE_LONGS = 64
+
+  CMD_PACKET_SYNCBYTE           = 0
+  CMD_PACKET_CMDFLAG            = 1
+  CMD_PACKET_SIZE               = 2
+  CMD_PACKET_DATA               = 3
+  MAX_CMD_PACKET_SIZE           = 100
+
+  MAX_ANS_HEADER_SIZE           = 7
+  ANS_SYNC1                     = 0
+  ANS_SYNC2                     = 1
+  ANS_SIZE                      = 2
+  ANS_TYPE                      = 6
+
+  ' RP-Lidar Input Packets
+
+  RPLIDAR_CMD_SYNC_BYTE         = $A5
+  RPLIDAR_CMDFLAG_HAS_PAYLOAD   = $80
+
+  RPLIDAR_ANS_SYNC_BYTE1        = $A5
+  RPLIDAR_ANS_SYNC_BYTE2        = $5A
+
+  RPLIDAR_ANS_PKTFLAG_LOOP      = $01
+
+  RESPONSE_MEASUREMENT_SIZE     = 5
+  RESPONSE_MEASUREMENT_QUALITY  = 0
+  RESPONSE_MEASUREMENT_CHECKBUT = 1
+  RESPONSE_MEASUREMENT_DISTANCE = 3
+
+  RESPONSE_DEVICE_SIZE          = 20
+  RESPONSE_DEVICE_MODEL         = 0
+  RESPONSE_DEVICE_FIRMWARE      = 1
+  RESPONSE_DEVICE_HARDWARE      = 3
+  RESPONSE_DEVICE_SERIALNO      = 4
+
+  RESPONSE_HEALTH_SIZE          = 3
+  RESPONSE_HEALTH_STATUS        = 0
+  RESPONSE_HEALTH_ERROR         = 1
+
+  RPLidarMeasurementSize        = 10
+  RPLidarMeasurementDistance    = 0
+  RPLidarMeasurementAngle       = 4
+  RPLidarMeasurementQuality     = 8
+  RPLidarMeasurementStartBit    = 9
+
+  ' Commands
+  '-----------------------------------------
+
+  ' Commands without payload and response
+  RPLIDAR_CMD_STOP              = $25
+  RPLIDAR_CMD_SCAN              = $20
+  RPLIDAR_CMD_FORCE_SCAN        = $21
+  RPLIDAR_CMD_RESET             = $40
+
+  ' Commands without payload but have response
+  RPLIDAR_CMD_GET_DEVICE_INFO   = $50
+  RPLIDAR_CMD_GET_DEVICE_HEALTH = $52
+
+  ' Response
+  ' ------------------------------------------
+  RPLIDAR_ANS_TYPE_MEASUREMENT  = $81
+
+  RPLIDAR_ANS_TYPE_DEVINFO      = $04
+  RPLIDAR_ANS_TYPE_DEVHEALTH    = $06
+
+  RPLIDAR_STATUS_OK             = $00
+  RPLIDAR_STATUS_WARNING        = $01
+  RPLIDAR_STATUS_ERROR          = $02
+
+  RPLIDAR_RESP_MEAS_SYNCBIT                             = (1<<0)
+  RPLIDAR_RESP_MEAS_QUAL_SHIFT                          = 2
+  RPLIDAR_RESP_MEAS_CHECKBIT                            = (1<<0)
+  RPLIDAR_RESP_MEAS_ANGLE_SHIFT                         = 1
+
+  RESULT_OK                     = 0
+  RESULT_FAIL_BIT               = $80000000
+  RESULT_INVALID_DATA           = ($8000 | RESULT_FAIL_BIT)
+  RESULT_OPERATION_TIMEOUT      = ($8002 | RESULT_FAIL_BIT)
+  RPLIDAR_DEFAULT_TIMEOUT       = 500
+
+OBJ
+  utilities     : "utilities"
+
+VAR
+  long txpin, rxpin, motorpin
+  long Cog
+  byte cmd_packet[MAX_CMD_PACKET_SIZE]
+  byte ans_header[MAX_ANS_HEADER_SIZE]
+  byte response_measurement[RESPONSE_MEASUREMENT_SIZE]
+  byte response_device[RESPONSE_DEVICE_SIZE]
+  byte response_health[RESPONSE_HEALTH_SIZE]
+  byte RPLidarMeasurement[RPLidarMeasurementSize]
+
+  long taskStack[STACK_SIZE_LONGS]
+
+PUB null()
+
+PUB start(txpin_, rxpin_, motorpin_) : ok | x, clkx
+  longmove(@txpin, @txpin_, 3)
+  stop()
+
+  motoroff()
+
+  clkx := muldiv64(clkfreq, $1_0000, LIDAR_BAUD) & $FFFFFC00                    ' set bit timing
+  clkx |= (LIDAR_BITS-1)                                                        ' set bits (8 data)
+  pinstart(rxpin, LIDARRX, clkx, 0)
+  pinstart(txpin, LIDARTX, clkx, 0)
+
+  ok := Cog := cogspin(NEWCOG, lidarInfo(), @taskStack) + 1
+
+PUB stop()
+
+  if Cog                                                                        ' stop motor reads
+    cogstop(Cog - 1)
+    Cog := 0
+
+  pinclear(txpin)
+  pinclear(rxpin)
+  pinclear(motorpin)
+
+PRI write(pbytes, nobytes) | i
+
+  repeat i from 0 to nobytes-1
+    wypin(txpin, byte[pbytes][i])
+    repeat
+    while pinr(txpin) == 0
+
+PRI read() : rxbyte | check
+
+  repeat
+  while pinr(rxpin) == 0
+  rxbyte := rdpin(rxpin) >> 24
+
+PRI _sendCommand(cmd, ppayload, payloadsize) : ok | byte checksum, byte sizebyte, pos
+
+  debug("_sendCommand")
+  if payloadsize <> 0 and ppayload <> 0
+    cmd |= RPLIDAR_CMDFLAG_HAS_PAYLOAD
+
+  cmd_packet[CMD_PACKET_SYNCBYTE] := RPLIDAR_CMD_SYNC_BYTE
+  cmd_packet[CMD_PACKET_CMDFLAG] := cmd
+
+  ' send header first
+  write(@cmd_packet, 2)
+  debug("_sendCommand w2")
+
+  if cmd & RPLIDAR_CMDFLAG_HAS_PAYLOAD
+    checksum ^= RPLIDAR_CMD_SYNC_BYTE
+    checksum ^= cmd
+    checksum ^= (payloadsize & $FF)
+
+    ' calc checksum
+    repeat pos from 0 to payloadsize-1
+      checksum ^= BYTE[ppayload][pos]
+
+    ' send size
+    sizebyte := payloadsize
+    write(@sizebyte, 1)
+    debug("_sendCommand w1")
+
+    ' send payload
+    write(ppayload, sizebyte)
+    debug("_sendCommand ", sdec(sizebyte))
+
+    ' send checksum
+    write(@checksum, 1)
+    debug("_sendCommand w1")
+
+    return RESULT_OK
+
+PRI _waitResponseHeader(pans, timeout) : ok | recvPos, currentTs, currentbyte
+
+  currentTs := getms() + timeout
+  repeat while getms() +> currentTs
+
+    if (currentbyte := read()) < 0
+      next
+    case recvPos
+      0:
+        if currentbyte <> RPLIDAR_ANS_SYNC_BYTE1
+          next
+      1:
+        if currentbyte <> RPLIDAR_ANS_SYNC_BYTE2
+          recvPos := 0
+          next
+    byte[pans][recvPos++] := currentbyte
+
+    if recvPos == MAX_ANS_HEADER_SIZE
+      return RESULT_OK
+    return RESULT_OPERATION_TIMEOUT
+
+PUB motoron()
+  debug("motor on")
+  pinstart(motorpin, MOTOR_OFF, 0, 0)
+
+PUB motoroff()
+  debug("motor off")
+  pinstart(motorpin, MOTOR_ON, 0, 0)
+
+PUB getDeviceInfo(pinfobuf, timeout) : ok | recvPos, currentTs, remainingtime, ans, currentbyte
+'' ask the RPLIDAR for its device info like the serial number
+
+  debug("getDeviceInfo")
+  recvPos := 0
+  currentTs := getms()
+
+  if (ans := _sendCommand(RPLIDAR_CMD_GET_DEVICE_INFO, 0, 0)) & RESULT_FAIL_BIT
+    return ans
+
+  if (ans := _waitResponseHeader(@ans_header, timeout)) & RESULT_FAIL_BIT
+    debug("getDeviceInfo1 ", uhex(ans))
+    return ans
+
+  ' verify whether we got a correct header
+  if ans_header[ANS_TYPE] <> RPLIDAR_ANS_TYPE_DEVINFO
+    debug("getDeviceInfo2 ", uhex(ans_header[ANS_TYPE]))
+    return RESULT_INVALID_DATA
+
+  if ans_header[ANS_SIZE] < RESPONSE_DEVICE_SIZE
+    debug("getDeviceInfo3 ", uhex(ans_header[ANS_SIZE]))
+    return RESULT_INVALID_DATA
+
+  repeat until getms() - currentTs > timeout
+    currentbyte := read()
+    if currentbyte < 0
+      next
+    byte[pinfobuf][recvPos++] := currentbyte
+
+    if recvPos == RESPONSE_DEVICE_SIZE
+      debug("getDeviceInfo ok")
+      return RESULT_OK
+
+  debug("getDeviceInfo timeout")
+  return RESULT_OPERATION_TIMEOUT
+
+PRI stopScan() : ans
+' stop the measurement operation
+  debug("stopscan")
+  ans := _sendCommand(RPLIDAR_CMD_STOP, 0, 0)
+
+PUB startScan(force, timeout) : ans
+' start the measurement operation
+  debug("startscan")
+  stopScan() ' force the previous operation to stop
+
+  if (ans := _sendCommand(force?RPLIDAR_CMD_FORCE_SCAN:RPLIDAR_CMD_SCAN, 0, 0)) & RESULT_FAIL_BIT
+    debug("startscan1 ", uhex(ans))
+    return ans
+
+  ' waiting for confirmation
+  if (ans := _waitResponseHeader(@ans_header, timeout)) & RESULT_FAIL_BIT
+    debug("startscan2 ", uhex(ans))
+    return ans
+
+  ' verify whether we got a correct header
+  if ans_header[ANS_TYPE] <> RPLIDAR_ANS_TYPE_MEASUREMENT
+    debug("startscan3 ", uhex(ans_header[ANS_TYPE]))
+    return RESULT_INVALID_DATA
+
+  if ans_header[ANS_SIZE] < MAX_ANS_HEADER_SIZE
+    debug("startscan4 ", uhex(ans_header[ANS_SIZE]))
+    return RESULT_INVALID_DATA
+  debug("startscan ok")
+  return RESULT_OK
+
+PUB waitPoint(timeout) : ok | recvPos, currentbyte, currentTs
+' wait for one sample point to arrive
+
+  debug("waitpoint")
+  currentTs := getms() + timeout
+
+  repeat until getms() +> currentTs
+    if (currentbyte := read()) < 0
+      next
+
+    case recvPos
+      0:                                           ' expect the sync bit and its reverse in this byte
+        ifnot ((currentbyte >> 1) ^ currentbyte) & $01
+          next
+        debug("waitpoint 1")
+      1:                                           ' expect the highest bit to be 1
+        ifnot currentbyte & RPLIDAR_RESP_MEAS_CHECKBIT
+          recvPos := 0
+        debug("waitpoint 2")
+    response_measurement[recvPos++] := currentbyte
+    debug("waitpoint 3 ", sdec(recvPos))
+
+    if recvPos == RESPONSE_MEASUREMENT_SIZE
+      debug("waitpoint 4 ", sdec(recvPos))
+      ' store the data ...
+      LONG[RPLidarMeasurement][RPLidarMeasurementDistance] := float(WORD[@response_measurement][RESPONSE_MEASUREMENT_DISTANCE])/. 4.0
+      LONG[RPLidarMeasurement][RPLidarMeasurementAngle] := float(WORD[@response_measurement][RESPONSE_MEASUREMENT_CHECKBUT] >> RPLIDAR_RESP_MEAS_ANGLE_SHIFT)/. 64.0
+      RPLidarMeasurement[RPLidarMeasurementQuality] := response_measurement[RESPONSE_MEASUREMENT_QUALITY] >> RPLIDAR_RESP_MEAS_QUAL_SHIFT
+      RPLidarMeasurement[RPLidarMeasurementStartBit] := response_measurement[RESPONSE_MEASUREMENT_QUALITY] & RPLIDAR_RESP_MEAS_SYNCBIT
+      debug("waitpoint ok")
+      return RESULT_OK
+
+  debug("waitpoint timeout")
+  return RESULT_OPERATION_TIMEOUT
+
+PRI getCurrentPoint() : fdistance, fangle, startBit, quality
+
+  fdistance := LONG[RPLidarMeasurement][RPLidarMeasurementDistance]              ' distance value in mm unit
+  fangle := LONG[RPLidarMeasurement][RPLidarMeasurementAngle]                    ' angle value in degree
+  startBit := RPLidarMeasurement[RPLidarMeasurementStartBit]                     ' whether this point is belong to a new scan
+  quality := RPLidarMeasurement[RPLidarMeasurementQuality]                       ' quality of the current measurement
+
+PRI lidarInfo() | fdistance, fangle, startBit, quality, minDistance, angleAtMinDist
+
+  repeat
+    ifnot waitPoint(RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT
+      ' perform data processing here...
+      fdistance, fangle, startBit, quality := getCurrentPoint()
+
+      if startBit
+        ' a new scan, display the previous data...
+        'displayColor(angleAtMinDist, minDistance);
+        minDistance := 100000.0
+        angleAtMinDist := 0.0
+      '  fdistance >. 0.0 and fdistance <. minDistance
+      elseif utilities.frel(fdistance, 0.0, utilities.FGT) and utilities.frel(fdistance, minDistance, utilities.FLT)
+        minDistance := fdistance
+        angleAtMinDist := fangle
+    else
+      motoroff()
+      ' try to detect RPLIDAR...
+      ifnot getDeviceInfo(@response_device, 100) & RESULT_FAIL_BIT
+        ' detected...
+        startScan(false, RPLIDAR_DEFAULT_TIMEOUT)
+        motoron()
+        waitms(1000)
+
+  motoroff()
