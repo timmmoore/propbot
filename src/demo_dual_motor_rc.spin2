@@ -30,6 +30,8 @@
 ''                              connect VRA to setAcceleration
 ''   Updated.... 15 Sept 2023 (timmoore)
 ''                              add switch that moves bot 1 rotation forward, testing degree/distance with doco4k motors
+''   Updated.... 17 Sept 2023 (timmoore)
+''                              add support for RPLidar A1M8
 ''
 '' =================================================================================================
 
@@ -57,9 +59,9 @@ CON { fixed io pins }
   SBUS_RX  = 55  { I }                                          ' RC receiver SBUS channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver SPORT telemetry
 
-  LIDARTX       = 49
-  LIDARRX       = 50
-  LIDARCTL      = 51
+  LIDARTX       = 1
+  LIDARRX       = 0
+  LIDARCTL      = 2
 
   BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 20K + 3K
   BATTERY_LOW                   = 0
@@ -137,6 +139,8 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
             if status2OK == false
               debug("EEEE: LIDAR not started?!")
 
+        lidar.stop()
+        ' turn off lidar
         telemetry.stop()
         ' turn off our SBUS drivers
         remoteCtl.stop()
