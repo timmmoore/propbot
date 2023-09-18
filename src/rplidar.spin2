@@ -103,12 +103,16 @@ VAR
   byte response_health[RESPONSE_HEALTH_SIZE]
   byte RPLidarMeasurement[RPLidarMeasurementSize]
 
+  long distance[360]
+
   long taskStack[STACK_SIZE_LONGS]
 
 PUB null()
 
 PUB start(txpin_, rxpin_, motorpin_) : ok | clkx
   longmove(@txpin, @txpin_, 3)
+  longfill(@distance, -1, 360)
+
   stop()
 
   motoroff()
@@ -132,6 +136,14 @@ PUB stop()
   pinclear(txpin)
   pinclear(rxpin)
   pinclear(motorpin)
+
+PUB close(angle, deltaangle, distance_) : ok | i, index
+' check distances +- delta, if any less than distance then return true
+  repeat i from angle-deltaangle to angle+deltaangle
+    index := i+360                                                              ' in case -ve
+    index := (index > 360)?index - 360:index                                    ' in case over 360
+    if distance[index] < distance_
+      ok := true
 
 PRI write(pbytes, nobytes) | i
 
@@ -319,6 +331,7 @@ PRI lidarInfo() | fdistance, fangle, startBit, quality, minDistance, angleAtMinD
       fdistance, fangle, startBit, quality := getCurrentPoint()
       ' what happens if distance > range?
       debug(`Lidar `(trunc(fdistance), trunc(fangle)))
+      distance[trunc(fangle)] := trunc(fdistance)
 {
       if startBit
         ' a new scan, display the previous data...
