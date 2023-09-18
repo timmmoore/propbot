@@ -59,9 +59,9 @@ CON { fixed io pins }
   SBUS_RX  = 55  { I }                                          ' RC receiver SBUS channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver SPORT telemetry
 
-  LIDARTX       = 1
-  LIDARRX       = 0
-  LIDARCTL      = 2
+  LIDARTX                       = 1                             ' tx to lidar
+  LIDARRX                       = 0                             ' rx to lidar
+  LIDARCTL                      = 2                             ' motor control for lidar
 
   BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 20K + 3K
   BATTERY_LOW                   = 0
@@ -73,20 +73,39 @@ CON { fixed io pins }
   DEADBAND                      = 1                             ' ignore speeds slower than this
   MOTOROFFONIGNOREJOYSTICK      = true                          ' disable motor if joystick ignore switch is set
 
+  ' USFSMAX_VCC = 3.3V
+  ' USFSMAX_GND
+  USFSMAX_SDA                   = 3                             ' i2c pins for IMU
+  USFSMAX_SCL                   = 4                             ' different I2C bus from motor driver as supports much faster clock speed
+                                                                ' CLK speed of 3Mhz
+  USFSMAX_RESET                 = -1                            ' reset pin is optional
+
+  ' Bellevue, WA 98008
+  M_V                           = 49.4643
+  M_H                           = 19.0285
+  MAG_DECLINIATION              = 15.2473
+  QUAT_DIV                      = $07
+
+  PITCH                         = 0
+  ROLL                          = 1
+  YAW                           = 2
+  PRESSURE                      = 3
+
 OBJ { our Drive Subsystem }
 
-                                                    ' 1 cog, total -> 6 cogs
-    user        : "isp_bldc_motor_userconfig"       ' driver configuration
-    wheels      : "isp_steering_2wheel"             ' the dual-drive BLDC motors, 1 cog per motor, 1 sense cog -> 3 cogs
-    remoteCtl   : "isp_flysky_rx"                   ' the FlySky Transmitter, 1 cog
-    battery     : "jm_ez_analog"                    ' A2D to read battery voltage
-    telemetry   : "frskysport"                      ' bidirectional serial port to RC receiver for telemetry, 1 cog
-    lidar       : "rplidar"                         ' rplidar A1M8, 1 cog
+                                                        ' 1 cog, total -> 6 cogs
+    user        : "isp_bldc_motor_userconfig"           ' driver configuration
+    wheels      : "isp_steering_2wheel"                 ' the dual-drive BLDC motors, 1 cog per motor, 1 sense cog -> 3 cogs
+    remoteCtl   : "isp_flysky_rx"                       ' the FlySky Transmitter, 1 cog
+    battery     : "jm_ez_analog"                        ' A2D to read battery voltage
+    telemetry   : "frskysport"                          ' bidirectional serial port to RC receiver for telemetry, 1 cog
+    lidar       : "rplidar"                             ' rplidar A1M8, 1 cog
+    imu         : "usfsmax"                             ' imu
 
 VAR
     long    remoteCog, telemetryCog, lidarCog
 
-PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, motor, detectModeLt, detectModeRt
+PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, motor, detectModeLt, detectModeRt, usfsavailable
 '' DEMO Driving a two wheeled platform
 
     debug("* demo dual motor control via R/C")
@@ -121,6 +140,9 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
         debug("* Set up - remote control")
 
         battery.start(BATTERY_ANALOG, BATTERY_LOW, BATTERY_HIGH)
+        usfsavailable := imu.startx(USFSMAX_SCL, USFSMAX_SDA, USFSMAX_RESET, @Config, yawoffset)
+        debug(if(usfsavailable), "IMU error: ", uhex(usfsavailable))
+
         remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
         lidarCog := lidar.start(LIDARTX, LIDARRX, LIDARCTL)
@@ -204,6 +226,9 @@ VAR
     long    nAccelerationRate
     long    nDoingOneRotation
     long    nDoingAutoRoam
+
+    long    osensor[4]
+    long    qt[4]
 
 PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate, accrate, bOneRotation, bAutoRoam
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
@@ -350,38 +375,48 @@ PRI doOneRotation() | ltdegree, rtdegree
     debug("  Onrotation Check:", sdec(ltdegree), " ", sdec(rtdegree))
 
 CON
-  AUTODRIVE     = 20                                                            ' drive speed
-  AUTOTURN      = 20                                                            ' turning speed
+  AUTODRIVE     = 10                                                            ' drive speed
+  AUTOTURN      = 100                                                           ' turning speed
   DELTAANGLE    = 5                                                             ' +- angle when checking distance
   MINDISTANCE   = 500                                                           ' min distance in mm
   FRONTANGLE    = 0                                                             ' angle to front
   LEFTANGLE     = 270                                                           ' angle to left
   RIGHTANGLE    = 90                                                            ' angle to right
 
-PRI doAutoRoam() | front_, left_, right_
-    debug("  AutoRoam")
-    repeat
-      front_ := lidar.close(FRONTANGLE, DELTAANGLE, MINDISTANCE)                ' check front, left and right
-      left_ := lidar.close(LEFTANGLE, DELTAANGLE, MINDISTANCE)
-      right_ := lidar.close(RIGHTANGLE, DELTAANGLE, MINDISTANCE)
+PRI doAutoRoam() | front_, left_, right_, ltcurrent, rtcurrent
+  ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+  _, qt[0], qt[1], qt[2], qt[3] := imu.getMin()                               ' get yaw direction from imu
+  osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE] := imu.computeIMUFixed(qt[0], qt[1], qt[2], qt[3])
+  debug("  AutoRoam: ",  fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+  repeat
+    front_ := lidar.checkdistance(FRONTANGLE, DELTAANGLE, MINDISTANCE)          ' check front, left and right
+    left_  := lidar.checkdistance(LEFTANGLE,  DELTAANGLE, MINDISTANCE)
+    right_ := lidar.checkdistance(RIGHTANGLE, DELTAANGLE, MINDISTANCE)
+    _, qt[0], qt[1], qt[2], qt[3] := imu.getMin()                               ' get yaw direction from imu
+    osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE] := imu.computeIMUFixed(qt[0], qt[1], qt[2], qt[3])
 
-      if front_ and left_ and right_                                            ' too close, front, left and right
-        debug("  AutoRoam back")
-        wheels.driveDirection(-AUTODRIVE, 0)                                    ' go backwards
-      elseif front_                                                             ' too close in front
-        if left_                                                                ' and left
-          debug("  AutoRoam right")
-          wheels.driveDirection(AUTODRIVE, AUTOTURN)                            ' turn right
-        else                                                                    ' otherwise
-          debug("  AutoRoam left")
-          wheels.driveDirection(AUTODRIVE, -AUTOTURN)                           ' turn left
-      else
-        debug("  AutoRoam forwards")                                            ' nothing in front
-        wheels.driveDirection(AUTODRIVE, 0)                                     ' so forwards
-    while remoteCtl.swIsOn(remoteCtl.CH_12) == false                            ' done?
+    if front_ and left_ and right_                                              ' too close, front, left and right
+      ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+      debug("  AutoRoam back: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+      wheels.driveDirection(-AUTODRIVE, 0)                                      ' go backwards
+    elseif front_                                                               ' too close in front
+      if left_                                                                  ' and left
+        ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+        debug("  AutoRoam right: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+        wheels.driveDirection(AUTODRIVE, AUTOTURN)                              ' turn right
+      else                                                                      ' otherwise
+        ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+        debug("  AutoRoam left: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+        wheels.driveDirection(AUTODRIVE, -AUTOTURN)                             ' turn left
+    else
+      ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+      debug("  AutoRoam forwards: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))                                              ' nothing in front
+      wheels.driveDirection(AUTODRIVE, 0)                                       ' so forwards
+  while remoteCtl.swIsOn(remoteCtl.CH_12) == false                              ' done?
 
-    wheels.driveDirection(0, 0)                                                 ' stop bot before leaving autoroam
-    debug("  AutoRoam Done")
+  wheels.driveDirection(0, 0)                                                   ' stop bot before leaving autoroam
+  ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+  debug("  AutoRoam Done: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
 
 PRI updPosnBothJoy(): speed, direction | rawSpeed, rawDirection, rngMin, rngMax
     ' route Rt Joystick Vt (spring center) to FWD/REV (speed)
@@ -434,6 +469,16 @@ DAT
     ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810
     validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CH_12, remoteCtl.CTL_NADA
     valid3Ways      byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CTL_NADA
+
+  ' usfsmax configuration
+  Config
+                LONG M_V
+                LONG M_H
+                LONG MAG_DECLINIATION
+                byte QUAT_DIV, 0, 0, 0
+'
+  ' yaw offset for usfsmax to front bot in 0-360.0 degrees
+  yawoffset     long    1.0
 
 CON { license }
 {{
