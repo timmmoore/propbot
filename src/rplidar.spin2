@@ -137,8 +137,9 @@ PUB stop()
   pinclear(rxpin)
   pinclear(motorpin)
 
-PUB close(angle, deltaangle, distance_) : ok | i, index
+PUB checkdistance(angle, deltaangle, distance_) : ok | i, index
 ' check distances +- delta, if any less than distance then return true
+' return false if there is nothing < distance @ angle +- deltaangle
   repeat i from angle-deltaangle to angle+deltaangle
     index := i+360                                                              ' in case -ve
     index := (index > 360)?index - 360:index                                    ' in case over 360
