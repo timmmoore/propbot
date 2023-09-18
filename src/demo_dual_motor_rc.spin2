@@ -203,8 +203,9 @@ VAR
     long    bLastShowDriveStates
     long    nAccelerationRate
     long    nDoingOneRotation
+    long    nDoingAutoRoam
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate, accrate, bOneRotation
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate, accrate, bOneRotation, bAutoRoam
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -246,6 +247,8 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
         remoteCtl.showDebug(FALSE)
 
         bOneRotation := remoteCtl.swIsOn(remoteCtl.CH_11)
+
+        bAutoRoam := remoteCtl.swIsOn(remoteCtl.CH_12)
 
         accrate := remoteCtl.readchannel(remoteCtl.CTL_VRA)/10
 
@@ -312,6 +315,9 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 doOneRotation()
             elseif bOneRotation == true and nDoingOneRotation == true           ' switch must be reset before allowed again
                 nDoingOneRotation := false
+            elseif bAutoRoam == false and nDoingAutoRoam == false               ' no emergency cutoff and no joystick before accept autoroam
+                nDoingAutoRoam := true
+                doAutoRoam()
 
         telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
         telemetry.setcurrent(nLtmAmps, nRtmAmps)
@@ -342,6 +348,40 @@ PRI doOneRotation() | ltdegree, rtdegree
     waitms(1000)
     ltdegree, rtdegree := wheels.getRotationCount(wheels.DRU_DEGREES)           ' get current wheel rotation
     debug("  Onrotation Check:", sdec(ltdegree), " ", sdec(rtdegree))
+
+CON
+  AUTODRIVE     = 20                                                            ' drive speed
+  AUTOTURN      = 20                                                            ' turning speed
+  DELTAANGLE    = 5                                                             ' +- angle when checking distance
+  MINDISTANCE   = 500                                                           ' min distance in mm
+  FRONTANGLE    = 0                                                             ' angle to front
+  LEFTANGLE     = 270                                                           ' angle to left
+  RIGHTANGLE    = 90                                                            ' angle to right
+
+PRI doAutoRoam() | front_, left_, right_
+    debug("  AutoRoam")
+    repeat
+      front_ := lidar.close(FRONTANGLE, DELTAANGLE, MINDISTANCE)                ' check front, left and right
+      left_ := lidar.close(LEFTANGLE, DELTAANGLE, MINDISTANCE)
+      right_ := lidar.close(RIGHTANGLE, DELTAANGLE, MINDISTANCE)
+
+      if front_ and left_ and right_                                            ' too close, front, left and right
+        debug("  AutoRoam back")
+        wheels.driveDirection(-AUTODRIVE, 0)                                    ' go backwards
+      elseif front_                                                             ' too close in front
+        if left_                                                                ' and left
+          debug("  AutoRoam right")
+          wheels.driveDirection(AUTODRIVE, AUTOTURN)                            ' turn right
+        else                                                                    ' otherwise
+          debug("  AutoRoam left")
+          wheels.driveDirection(AUTODRIVE, -AUTOTURN)                           ' turn left
+      else
+        debug("  AutoRoam forwards")                                            ' nothing in front
+        wheels.driveDirection(AUTODRIVE, 0)                                     ' so forwards
+    while remoteCtl.swIsOn(remoteCtl.CH_12) == false                            ' done?
+
+    wheels.driveDirection(0, 0)                                                 ' stop bot before leaving autoroam
+    debug("  AutoRoam Done")
 
 PRI updPosnBothJoy(): speed, direction | rawSpeed, rawDirection, rngMin, rngMax
     ' route Rt Joystick Vt (spring center) to FWD/REV (speed)
@@ -392,7 +432,7 @@ DAT
 '' rc transmitter configuration
     ctlMinValue     word    0,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172
     ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810
-    validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CTL_NADA
+    validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CH_12, remoteCtl.CTL_NADA
     valid3Ways      byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CTL_NADA
 
 CON { license }
