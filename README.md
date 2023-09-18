@@ -7,4 +7,4 @@ CAD
 
 ![render](docs/photos/PXL_20230825_074953381.jpg)
 
-![render](docs/render2.png)
+![render](docs/render3.png)
