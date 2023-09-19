@@ -12,7 +12,7 @@ CON
   LIDAR_BITS                    = 8
   LIDAR_BAUD                    = 115200
 
-  STACK_SIZE_LONGS              = 200
+  STACK_SIZE_LONGS              = 2000
 
   CMD_PACKET_SYNCBYTE           = 0
   CMD_PACKET_CMDFLAG            = 1
@@ -37,7 +37,7 @@ CON
 
   RESPONSE_MEASUREMENT_SIZE     = 5
   RESPONSE_MEASUREMENT_QUALITY  = 0
-  RESPONSE_MEASUREMENT_CHECKBUT = 1
+  RESPONSE_MEASUREMENT_CHECKBIT = 1
   RESPONSE_MEASUREMENT_DISTANCE = 3
 
   RESPONSE_DEVICE_SIZE          = 20
@@ -49,12 +49,6 @@ CON
   RESPONSE_HEALTH_SIZE          = 3
   RESPONSE_HEALTH_STATUS        = 0
   RESPONSE_HEALTH_ERROR         = 1
-
-  RPLidarMeasurementSize        = 10
-  RPLidarMeasurementDistance    = 0
-  RPLidarMeasurementAngle       = 4
-  RPLidarMeasurementQuality     = 8
-  RPLidarMeasurementStartBit    = 9
 
   ' Commands
   '-----------------------------------------
@@ -101,7 +95,10 @@ VAR
   byte response_measurement[RESPONSE_MEASUREMENT_SIZE]
   byte response_device[RESPONSE_DEVICE_SIZE]
   byte response_health[RESPONSE_HEALTH_SIZE]
-  byte RPLidarMeasurement[RPLidarMeasurementSize]
+  long RPLidarMeasurementDistance
+  long RPLidarMeasurementAngle
+  long RPLidarMeasurementQuality
+  long RPLidarMeasurementStartBit
 
   long distance[360]
 
@@ -128,7 +125,7 @@ PUB start(txpin_, rxpin_, motorpin_) : ok | clkx
 PUB stop()
   if Cog                                                                        ' stop lidar reads
     notstopped := false
-    waitms(100)                                                                 ' should exist
+    waitms(100)                                                                 ' should exit
     cogstop(Cog-1)
     Cog := 0
 
@@ -161,7 +158,6 @@ PRI read() : rxbyte
 
 PRI _sendCommand(cmd, ppayload, payloadsize) : ok | byte checksum, byte sizebyte, pos
 
-  debug("_sendCommand")
   if payloadsize <> 0 and ppayload <> 0
     cmd |= RPLIDAR_CMDFLAG_HAS_PAYLOAD
 
@@ -169,7 +165,6 @@ PRI _sendCommand(cmd, ppayload, payloadsize) : ok | byte checksum, byte sizebyte
   cmd_packet[CMD_PACKET_CMDFLAG] := cmd
 
   write(@cmd_packet, 2)                                                         ' send header first
-  debug("_sendCommand w2")
 
   if cmd & RPLIDAR_CMDFLAG_HAS_PAYLOAD
     checksum ^= RPLIDAR_CMD_SYNC_BYTE                                           ' start checksum with non data stuff
@@ -181,22 +176,19 @@ PRI _sendCommand(cmd, ppayload, payloadsize) : ok | byte checksum, byte sizebyte
 
     sizebyte := payloadsize                                                     ' send size
     write(@sizebyte, 1)
-    debug("_sendCommand w1")
 
     write(ppayload, sizebyte)                                                   ' send payload
-    debug("_sendCommand ", sdec(sizebyte))
 
     write(@checksum, 1)                                                         ' send checksum
-    debug("_sendCommand w1")
 
-    return RESULT_OK
+  return RESULT_OK
 
 PRI _waitResponseHeader(pans, timeout) : ok | recvPos, currentTs, currentbyte
 
   currentTs := getms() + timeout
-  repeat while getms() +> currentTs
+  repeat while getms() +< currentTs
 
-    if (currentbyte := read()) < 0
+    if (currentbyte := read()) == -1
       next
     if recvPos == 0 and currentbyte <> RPLIDAR_ANS_SYNC_BYTE1
       next
@@ -207,151 +199,145 @@ PRI _waitResponseHeader(pans, timeout) : ok | recvPos, currentTs, currentbyte
 
     if recvPos == MAX_ANS_HEADER_SIZE
       return RESULT_OK
-    return RESULT_OPERATION_TIMEOUT
+
+  return RESULT_OPERATION_TIMEOUT
 
 PRI motoron()
-  debug("motor on")
-  PINLOW(motorpin)
-
-PRI motoroff()
-  debug("motor off")
   PINHIGH(motorpin)
 
-PRI getDeviceInfo(pinfobuf, timeout) : ok | recvPos, currentTs, remainingtime, ans, currentbyte
-'' ask the RPLIDAR for its device info like the serial number
+PRI motoroff()
+  PINLOW(motorpin)
 
-  debug("getDeviceInfo")
+PRI getDeviceInfo(pinfobuf, timeout) : ok | recvPos, currentTs, remainingtime, ans, currentbyte, i
+'' ask the RPLIDAR for its device info like the serial number
 
   if (ans := _sendCommand(RPLIDAR_CMD_GET_DEVICE_INFO, 0, 0)) & RESULT_FAIL_BIT
     return ans
 
   if (ans := _waitResponseHeader(@ans_header, timeout)) & RESULT_FAIL_BIT
-    debug("getDeviceInfo1 ", uhex(ans))
     return ans
 
   ' verify whether we got a correct header
   if ans_header[ANS_TYPE] <> RPLIDAR_ANS_TYPE_DEVINFO
-    debug("getDeviceInfo2 ", uhex(ans_header[ANS_TYPE]))
     return RESULT_INVALID_DATA
 
   if ans_header[ANS_SIZE] < RESPONSE_DEVICE_SIZE
-    debug("getDeviceInfo3 ", uhex(ans_header[ANS_SIZE]))
     return RESULT_INVALID_DATA
 
   recvPos := 0
   currentTs := getms() + timeout
-  repeat until getms() +> currentTs
-    currentbyte := read()
-    if currentbyte < 0
+  repeat while getms() +< currentTs
+    if (currentbyte := read()) == -1
       next
     byte[pinfobuf][recvPos++] := currentbyte
 
     if recvPos == RESPONSE_DEVICE_SIZE
-      debug("getDeviceInfo ok")
       return RESULT_OK
 
-  debug("getDeviceInfo timeout")
   return RESULT_OPERATION_TIMEOUT
 
 PRI stopScan() : ans
 ' stop the measurement operation
-  debug("stopscan")
   ans := _sendCommand(RPLIDAR_CMD_STOP, 0, 0)
 
 PRI startScan(force, timeout) : ans
 ' start the measurement operation
-  debug("startscan")
   stopScan() ' force the previous operation to stop
 
   if (ans := _sendCommand(force?RPLIDAR_CMD_FORCE_SCAN:RPLIDAR_CMD_SCAN, 0, 0)) & RESULT_FAIL_BIT
-    debug("startscan1 ", uhex(ans))
     return ans
 
   ' waiting for confirmation
   if (ans := _waitResponseHeader(@ans_header, timeout)) & RESULT_FAIL_BIT
-    debug("startscan2 ", uhex(ans))
     return ans
 
   ' verify whether we got a correct header
   if ans_header[ANS_TYPE] <> RPLIDAR_ANS_TYPE_MEASUREMENT
-    debug("startscan3 ", uhex(ans_header[ANS_TYPE]))
     return RESULT_INVALID_DATA
 
-  if ans_header[ANS_SIZE] < MAX_ANS_HEADER_SIZE
-    debug("startscan4 ", uhex(ans_header[ANS_SIZE]))
+  if ans_header[ANS_SIZE] < RESPONSE_MEASUREMENT_SIZE
     return RESULT_INVALID_DATA
-  debug("startscan ok")
   return RESULT_OK
 
 PRI waitPoint(timeout) : ok | recvPos, currentbyte, currentTs
 ' wait for one sample point to arrive
-
-  debug("waitpoint")
   currentTs := getms() + timeout
 
-  repeat until getms() +> currentTs
-    if (currentbyte := read()) < 0
+  repeat while getms() +< currentTs
+    if (currentbyte := read()) == -1
       next
 
     if recvPos == 0 and not (((currentbyte >> 1) ^ currentbyte) & $01)
       next
-      debug("waitpoint 1")
     if recvPos == 1 and not (currentbyte & RPLIDAR_RESP_MEAS_CHECKBIT)
       recvPos := 0
-      debug("waitpoint 2")
+      next
     response_measurement[recvPos++] := currentbyte
-    debug("waitpoint 3 ", sdec(recvPos))
 
     if recvPos == RESPONSE_MEASUREMENT_SIZE
-      debug("waitpoint 4 ", sdec(recvPos))
       ' store the data ...
-      LONG[RPLidarMeasurement][RPLidarMeasurementDistance] := float(WORD[@response_measurement][RESPONSE_MEASUREMENT_DISTANCE])/. 4.0
-      LONG[RPLidarMeasurement][RPLidarMeasurementAngle] := float(WORD[@response_measurement][RESPONSE_MEASUREMENT_CHECKBUT] >> RPLIDAR_RESP_MEAS_ANGLE_SHIFT)/. 64.0
-      RPLidarMeasurement[RPLidarMeasurementQuality] := response_measurement[RESPONSE_MEASUREMENT_QUALITY] >> RPLIDAR_RESP_MEAS_QUAL_SHIFT
-      RPLidarMeasurement[RPLidarMeasurementStartBit] := response_measurement[RESPONSE_MEASUREMENT_QUALITY] & RPLIDAR_RESP_MEAS_SYNCBIT
-      debug("waitpoint ok")
+      RPLidarMeasurementDistance := (response_measurement[RESPONSE_MEASUREMENT_DISTANCE] | (response_measurement[RESPONSE_MEASUREMENT_DISTANCE+1]<<8)) >> 2
+      RPLidarMeasurementAngle := (response_measurement[RESPONSE_MEASUREMENT_CHECKBIT] | (response_measurement[RESPONSE_MEASUREMENT_CHECKBIT+1]<<8)) >> 7
+      RPLidarMeasurementQuality := response_measurement[RESPONSE_MEASUREMENT_QUALITY] >> RPLIDAR_RESP_MEAS_QUAL_SHIFT
+      RPLidarMeasurementStartBit := response_measurement[RESPONSE_MEASUREMENT_QUALITY] & RPLIDAR_RESP_MEAS_SYNCBIT
       return RESULT_OK
 
-  debug("waitpoint timeout")
   return RESULT_OPERATION_TIMEOUT
 
-PUB getCurrentPoint() : fdistance, fangle, startBit, quality
+PUB getCurrentPoint() : cdistance, cangle, startBit, quality
 
-  fdistance := LONG[RPLidarMeasurement][RPLidarMeasurementDistance]              ' distance value in mm unit
-  fangle := LONG[RPLidarMeasurement][RPLidarMeasurementAngle]                    ' angle value in degree
-  startBit := RPLidarMeasurement[RPLidarMeasurementStartBit]                     ' whether this point is belong to a new scan
-  quality := RPLidarMeasurement[RPLidarMeasurementQuality]                       ' quality of the current measurement
+  cdistance := RPLidarMeasurementDistance                                       ' distance value in mm unit
+  cangle := 0 #> RPLidarMeasurementAngle <# 359                                 ' angle value in degree and in range
+  cangle := (360 - cangle) + 90
+  cangle //= 360                                                '
+  startBit := RPLidarMeasurementStartBit                                        ' whether this point is belong to a new scan
+  quality := RPLidarMeasurementQuality                                          ' quality of the current measurement
 
-PRI lidarInfo() | fdistance, fangle, startBit, quality, minDistance, angleAtMinDist
+PRI lidarInfo() | ldistance, langle, startBit, quality, display
 
-  debug(`SCOPE_XY Lidar RANGE 5000 POLAR 360 'Normal')
+  debug(`scope_xy s samples 512 range 5_000 polar 360 'R')
 
   repeat while notstopped
     ifnot waitPoint(RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT
+      display := (display + 1) & $1f                                            ' every 32 so can keep up but not factor of 360
       ' perform data processing here...
-      fdistance, fangle, startBit, quality := getCurrentPoint()
+      ldistance, langle, startBit, quality := getCurrentPoint()
       ' what happens if distance > range?
-      debug(`Lidar `(trunc(fdistance), trunc(fangle)))
-      distance[trunc(fangle)] := trunc(fdistance)
-{
-      if startBit
-        ' a new scan, display the previous data...
-        debug(`Lidar `(trunc(angleAtMinDist), trunc(minDistance)))
-        minDistance := 100000.0
-        angleAtMinDist := 0.0
-      '  fdistance >. 0.0 and fdistance <. minDistance
-      elseif utilities.frel(fdistance, 0.0, utilities.FGT) and utilities.frel(fdistance, minDistance, utilities.FLT)
-        minDistance := fdistance
-        angleAtMinDist := fangle
-}
-
+      ifnot display
+        debug(`s `(ldistance, langle))
+      distance[langle] := ldistance
     else
       motoroff()
       ' try to detect RPLIDAR...
-      ifnot getDeviceInfo(@response_device, 100) & RESULT_FAIL_BIT
+      ifnot getDeviceInfo(@response_device, RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT
         ' detected...
         startScan(false, RPLIDAR_DEFAULT_TIMEOUT)
         motoron()
         waitms(1000)
 
   motoroff()
+'
+con { license }
+
+{{
+
+  Terms of Use: MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this
+  software and associated documentation files (the "Software"), to deal in the Software
+  without restriction, including without limitation the rights to use, copy, modify,
+  merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to the following
+  conditions:
+
+  The above copyright notice and this permission notice shall be included in all copies
+  or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+  PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+  HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+  OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+}}
