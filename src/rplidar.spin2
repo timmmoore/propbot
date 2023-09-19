@@ -1,7 +1,7 @@
 {RoboPeak RPLIDAR A1M8}
 {
         4pin      5V, Gnd, tx, rx (tx/rx are 3.3V)
-        3pin      5V, Gnd, control
+        3pin      5V, Gnd, control (3.3V works)
 }
 
 CON
@@ -100,7 +100,9 @@ VAR
   long RPLidarMeasurementQuality
   long RPLidarMeasurementStartBit
 
-  long distance[360]
+  ' 0 is in front, rotates  anti-clockwise to 359 degrees
+  ' front of lidar is opposite end from motor
+  long distance[360]                                                            ' contains distance in mm for angle 0-360
 
   long taskStack[STACK_SIZE_LONGS]
 
@@ -127,26 +129,30 @@ PUB stop()
     notstopped := false
     waitms(100)                                                                 ' should exit
     cogstop(Cog-1)
-    Cog := 0
+    Cog := 0                                                                    ' force stopped
 
   motoroff()                                                                    ' make sure motor stopped
   pinclear(txpin)
   pinclear(rxpin)
   pinclear(motorpin)
 
-PUB checkdistance(angle, deltaangle, distance_) : ok | i, index
+PUB checkdistance(angle, deltaangle, distance_) : ok | index
 ' check distances +- delta, if any less than distance then return true
 ' return false if there is nothing < distance @ angle +- deltaangle
-  repeat i from angle-deltaangle to angle+deltaangle
-    index := i+360                                                              ' in case -ve
-    index := (index > 360)?index - 360:index                                    ' in case over 360
-    if distance[index] < distance_
+  repeat index from angle-deltaangle to angle+deltaangle
+    if distance[(index+360)//360] < distance_                                   ' in case -ve and/or over 360
       ok := true
 
-PRI write(pbytes, nobytes) | i
+PRI motoron()
+  PINHIGH(motorpin)
 
-  repeat i from 0 to nobytes-1
-    wypin(txpin, byte[pbytes][i])                                               ' send byte
+PRI motoroff()
+  PINLOW(motorpin)
+
+PRI write(pbytes, nobytes) | index
+
+  repeat index from 0 to nobytes-1
+    wypin(txpin, byte[pbytes][index])                                           ' send byte
     repeat                                                                      ' wait until flushed
     while pinr(txpin) == 0
 
@@ -166,7 +172,7 @@ PRI _sendCommand(cmd, ppayload, payloadsize) : ok | byte checksum, byte sizebyte
 
   write(@cmd_packet, 2)                                                         ' send header first
 
-  if cmd & RPLIDAR_CMDFLAG_HAS_PAYLOAD
+  if cmd & RPLIDAR_CMDFLAG_HAS_PAYLOAD                                          ' if going to send payload
     checksum ^= RPLIDAR_CMD_SYNC_BYTE                                           ' start checksum with non data stuff
     checksum ^= cmd
     checksum ^= (payloadsize & $FF)
@@ -186,52 +192,46 @@ PRI _sendCommand(cmd, ppayload, payloadsize) : ok | byte checksum, byte sizebyte
 PRI _waitResponseHeader(pans, timeout) : ok | recvPos, currentTs, currentbyte
 
   currentTs := getms() + timeout
-  repeat while getms() +< currentTs
+  repeat while getms() +< currentTs                                             ' wait timeout for response
 
     if (currentbyte := read()) == -1
       next
-    if recvPos == 0 and currentbyte <> RPLIDAR_ANS_SYNC_BYTE1
+    if recvPos == 0 and currentbyte <> RPLIDAR_ANS_SYNC_BYTE1                   ' look for sync 1 and 2
       next
     if recvPos == 1 and currentbyte <> RPLIDAR_ANS_SYNC_BYTE2
       recvPos := 0
       next
-    byte[pans][recvPos++] := currentbyte
+    byte[pans][recvPos++] := currentbyte                                        ' input into byte array
 
     if recvPos == MAX_ANS_HEADER_SIZE
-      return RESULT_OK
+      return RESULT_OK                                                          ' until we have answer header
 
   return RESULT_OPERATION_TIMEOUT
-
-PRI motoron()
-  PINHIGH(motorpin)
-
-PRI motoroff()
-  PINLOW(motorpin)
 
 PRI getDeviceInfo(pinfobuf, timeout) : ok | recvPos, currentTs, remainingtime, ans, currentbyte, i
 '' ask the RPLIDAR for its device info like the serial number
 
-  if (ans := _sendCommand(RPLIDAR_CMD_GET_DEVICE_INFO, 0, 0)) & RESULT_FAIL_BIT
+  if (ans := _sendCommand(RPLIDAR_CMD_GET_DEVICE_INFO, 0, 0)) & RESULT_FAIL_BIT ' send command to get device info
     return ans
 
-  if (ans := _waitResponseHeader(@ans_header, timeout)) & RESULT_FAIL_BIT
+  if (ans := _waitResponseHeader(@ans_header, timeout)) & RESULT_FAIL_BIT       ' wait for response
     return ans
 
   ' verify whether we got a correct header
-  if ans_header[ANS_TYPE] <> RPLIDAR_ANS_TYPE_DEVINFO
+  if ans_header[ANS_TYPE] <> RPLIDAR_ANS_TYPE_DEVINFO                           ' if it is what we are expecting
     return RESULT_INVALID_DATA
 
-  if ans_header[ANS_SIZE] < RESPONSE_DEVICE_SIZE
+  if ans_header[ANS_SIZE] < RESPONSE_DEVICE_SIZE                                ' and right size
     return RESULT_INVALID_DATA
 
   recvPos := 0
   currentTs := getms() + timeout
-  repeat while getms() +< currentTs
+  repeat while getms() +< currentTs                                             ' get rest of device info
     if (currentbyte := read()) == -1
       next
     byte[pinfobuf][recvPos++] := currentbyte
 
-    if recvPos == RESPONSE_DEVICE_SIZE
+    if recvPos == RESPONSE_DEVICE_SIZE                                          ' until we have right amount
       return RESULT_OK
 
   return RESULT_OPERATION_TIMEOUT
@@ -285,35 +285,30 @@ PRI waitPoint(timeout) : ok | recvPos, currentbyte, currentTs
   return RESULT_OPERATION_TIMEOUT
 
 PUB getCurrentPoint() : cdistance, cangle, startBit, quality
-
+' get last measurement
   cdistance := RPLidarMeasurementDistance                                       ' distance value in mm unit
   cangle := 0 #> RPLidarMeasurementAngle <# 359                                 ' angle value in degree and in range
-  cangle := (360 - cangle) + 90
-  cangle //= 360                                                '
+  cangle := (360 + 90 - cangle)//360                                            ' correct for polar scope_xy - invert and add 90
   startBit := RPLidarMeasurementStartBit                                        ' whether this point is belong to a new scan
   quality := RPLidarMeasurementQuality                                          ' quality of the current measurement
 
 PRI lidarInfo() | ldistance, langle, startBit, quality, display
-
-  debug(`scope_xy s samples 512 range 5_000 polar 360 'R')
-
+' find and start lidar scanning
+' get distances and update in distance/angle array
+  'debug(`scope_xy s samples 512 range 5_000 polar 360 'D')
   repeat while notstopped
     ifnot waitPoint(RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT
-      display := (display + 1) & $1f                                            ' every 32 so can keep up but not factor of 360
-      ' perform data processing here...
       ldistance, langle, startBit, quality := getCurrentPoint()
-      ' what happens if distance > range?
-      ifnot display
-        debug(`s `(ldistance, langle))
-      distance[langle] := ldistance
+      distance[langle] := ldistance                                             ' store in distance per angle array
+      'ifnot (display := (display + 1) & $1f)                                   ' every 32 so can keep up but not factor of 360
+      '  debug(`s `(ldistance, langle))
     else
       motoroff()
       ' try to detect RPLIDAR...
       ifnot getDeviceInfo(@response_device, RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT
-        ' detected...
-        startScan(false, RPLIDAR_DEFAULT_TIMEOUT)
-        motoron()
-        waitms(1000)
+        startScan(false, RPLIDAR_DEFAULT_TIMEOUT)                               ' detected, so start scanning
+        motoron()                                                               ' and turn motor on
+        waitms(1000)                                                            ' dont reduce this, continous error if not ready
 
   motoroff()
 '
