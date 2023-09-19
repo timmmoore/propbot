@@ -31,7 +31,7 @@
 ''   Updated.... 15 Sept 2023 (timmoore)
 ''                              add switch that moves bot 1 rotation forward, testing degree/distance with doco4k motors
 ''   Updated.... 17 Sept 2023 (timmoore)
-''                              add support for RPLidar A1M8
+''                              add support for RPLidar A1M8 and IMU
 ''
 '' =================================================================================================
 
@@ -53,15 +53,8 @@ CON { fixed io pins }
   SF_SDO   = 59  { O }
   SF_SDI   = 58  { I }
 
-  'LA_CHAN0 = 56  { O }                                          ' logic analyzer
-  'LA_CHAN1 = 57  { O }
-
   SBUS_RX  = 55  { I }                                          ' RC receiver SBUS channels
   SPORT_BI = 54  { I/O }                                        ' RC receiver SPORT telemetry
-
-  LIDARTX                       = 1                             ' tx to lidar
-  LIDARRX                       = 0                             ' rx to lidar
-  LIDARCTL                      = 2                             ' motor control for lidar
 
   BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 20K + 3K
   BATTERY_LOW                   = 0
@@ -72,6 +65,10 @@ CON { fixed io pins }
 
   DEADBAND                      = 1                             ' ignore speeds slower than this
   MOTOROFFONIGNOREJOYSTICK      = true                          ' disable motor if joystick ignore switch is set
+
+  LIDARTX                       = 1                             ' tx to lidar
+  LIDARRX                       = 0                             ' rx to lidar
+  LIDARCTL                      = 2                             ' motor control for lidar
 
   ' USFSMAX_VCC = 3.3V
   ' USFSMAX_GND
@@ -104,8 +101,9 @@ OBJ { our Drive Subsystem }
 
 VAR
     long    remoteCog, telemetryCog, lidarCog
+    long    usfsavailable
 
-PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, motor, detectModeLt, detectModeRt, usfsavailable
+PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, motor, detectModeLt, detectModeRt
 '' DEMO Driving a two wheeled platform
 
     debug("* demo dual motor control via R/C")
@@ -141,7 +139,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
 
         battery.start(BATTERY_ANALOG, BATTERY_LOW, BATTERY_HIGH)
         usfsavailable := imu.startx(USFSMAX_SCL, USFSMAX_SDA, USFSMAX_RESET, @Config, yawoffset)
-        debug(if(usfsavailable), "IMU error: ", uhex(usfsavailable))
+        debug(if(usfsavailable), "IMU start error: ", uhex(usfsavailable))
 
         remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
@@ -229,8 +227,9 @@ VAR
 
     long    osensor[4]
     long    qt[4]
+    long    fvoltage
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, fvoltage, bMinBattery, finalupdate, accrate, bOneRotation, bAutoRoam
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, bMinBattery, finalupdate, accrate, bOneRotation, bAutoRoam
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -277,13 +276,14 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
 
         accrate := remoteCtl.readchannel(remoteCtl.CTL_VRA)/10
 
+        updatetelemetry()
+
         if bLastShowDriveStates <> bShowDriveStates
             debug("- sho ", sdec_long_(bShowDriveStates))
             if bShowDriveStates
                 wheels.showDriveStates()
             bLastShowDriveStates := bShowDriveStates
 
-        nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
         if bShowState <> bLastShowState
             if bShowState
                 debug("  ltmA=", sdec_(nLtmAmps/10), ".", sdec_(nLtmAmps//10), ", rtmA=", sdec_(nRtmAmps/10), ".", sdec_(nRtmAmps//10))
@@ -344,8 +344,6 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 nDoingAutoRoam := true
                 doAutoRoam()
 
-        telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER)) ' battery voltage telemetry
-        telemetry.setcurrent(nLtmAmps, nRtmAmps)
         'if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
         if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
@@ -374,6 +372,16 @@ PRI doOneRotation() | ltdegree, rtdegree
     ltdegree, rtdegree := wheels.getRotationCount(wheels.DRU_DEGREES)           ' get current wheel rotation
     debug("  Onrotation Check:", sdec(ltdegree), " ", sdec(rtdegree))
 
+PRI updatetelemetry()
+' update telemetry
+    if usfsavailable
+        _, qt[0], qt[1], qt[2], qt[3] := imu.getMin()                           ' get yaw direction from imu
+        osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE] := imu.computeIMUFixed(qt[0], qt[1], qt[2], qt[3])
+        telemetry.setimu(osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE]) ' imu telemetry
+    telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER))  ' battery voltage telemetry
+    nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
+    telemetry.setcurrent(nLtmAmps, nRtmAmps)                                    ' current
+
 CON
   AUTODRIVE     = 10                                                            ' drive speed
   AUTOTURN      = 100                                                           ' turning speed
@@ -384,16 +392,16 @@ CON
   RIGHTANGLE    = 90                                                            ' angle to right
 
 PRI doAutoRoam() | front_, left_, right_, ltcurrent, rtcurrent
+
   ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-  _, qt[0], qt[1], qt[2], qt[3] := imu.getMin()                               ' get yaw direction from imu
-  osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE] := imu.computeIMUFixed(qt[0], qt[1], qt[2], qt[3])
+  updatetelemetry()
   debug("  AutoRoam: ",  fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+
   repeat
     front_ := lidar.checkdistance(FRONTANGLE, DELTAANGLE, MINDISTANCE)          ' check front, left and right
     left_  := lidar.checkdistance(LEFTANGLE,  DELTAANGLE, MINDISTANCE)
     right_ := lidar.checkdistance(RIGHTANGLE, DELTAANGLE, MINDISTANCE)
-    _, qt[0], qt[1], qt[2], qt[3] := imu.getMin()                               ' get yaw direction from imu
-    osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE] := imu.computeIMUFixed(qt[0], qt[1], qt[2], qt[3])
+    updatetelemetry()
 
     if front_ and left_ and right_                                              ' too close, front, left and right
       ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
