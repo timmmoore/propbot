@@ -176,7 +176,7 @@ PUB stop()
     cognum := 0                                                                 '  mark stopped
   pinclear(rxp)                                                                 ' remove old settings
 
-{
+
 pub setgps(tlatitude, tlongitude, tspeed, talt, tfix, tsatno, thdop)
   longmove(@latitude, @tlatitude, 7)
 
@@ -191,7 +191,6 @@ pub setactuals(pspeeds, paspeeds, pangles, tmax)
 
 pub setflow(pflows)
   longmove(@flow, pflows, 2)
-'}
 
 pub setvoltage(tvoltage)
   voltage := tvoltage
@@ -199,14 +198,12 @@ pub setvoltage(tvoltage)
 pub setcurrent(tcurrent1, tcurrent2)
   current1, current2 := tcurrent1, tcurrent2
 
-{
 pub settemperature(ptemps)                                                      ' temperature telemetry
   longmove(@temps, ptemps, 4)
 
 pub setcells(count, pcells)
   batterycount := count
   longmove(@battery, pcells, count<#MAXCELLS)
-'}
 
 '' rethink this, the response needs to be called from the poll
 {
@@ -270,10 +267,6 @@ PRI runsport() | rx, byte buffer[10], valid, index, physicalId
           'serial.fstr6(string("sport command received %x %x %x %x %x %x\r"), buffer[0], buffer[1], buffer[2], word[@buffer+3], long[@buffer+5], buffer[9])
           'commandReceived(buffer[2], word[@buffer+3], long[@buffer+5])
 
-pri validid(physicalId) : sensorid
-' is it one of our physical sensors?
-  sensorid := lookdown(physicalId: DATA_ID_FAS) ', DATA_ID_GPS, DATA_ID_ACTUALS, DATA_ID_ACC, DATA_ID_FLOW, DATA_ID_TEMP) ', DATA_ID_FLVSS, DATA_ID_VARIO)
-
 pri rxcheck() : rxbyte | o1
 '' Check for serial input
 '' -- returns -1 if nothing available
@@ -283,7 +276,6 @@ pri rxcheck() : rxbyte | o1
   else
     return -1
 
-{
 pri flv_getData(applicationIdt, subindex) : valuet | cellindex
 ' battery cell data, max MAXCELLS cells
   valuet := cellindex := subindex<<1                                            ' Bit 0-3: Cell id, 0 = 1&2, 2 = 3&4, 4 = 5&6
@@ -321,7 +313,6 @@ pri acc_getData(applicationIdt, subindex) : valuet
       valuet := round(roll *. 10.0)
     SENSOR_APPL_ID_PRESSURE:
       valuet := round(pressure *. 100.0)                                        ' 0.01hPa
-'}
 
 pri fas_getData(applicationIdt, subindex) : valuet
   case applicationIdt
@@ -332,7 +323,6 @@ pri fas_getData(applicationIdt, subindex) : valuet
     FSSP_DATAID_CURRENT2:
       valuet := current2                                                        ' in 0.1mA
 
-{
 pri actual(value) : valuet
 ' make 32bit signed value into 16bit unsigned and msb 1 if -ve
   valuet := value
@@ -349,13 +339,11 @@ pri flow_getData(index) : valuet
 
 pri temps_getData(index) : valuet
   valuet := temps[index]                                                        ' 0.01C
-'}
 
 pri sensor_getData(physicalId, applicationIdt, subindex) : valuet
   case_fast physicalId                                                          ' index from lookdown of physicalId
     DATA_ID_FAS:                                                                ' applicationId == FSSP_DATAID_VFAS
       valuet := fas_getData(applicationIdt, subindex)                           ' voltage * 0.01V
-{
     DATA_ID_GPS:                                                                          '
       valuet := gps_getData(applicationIdt, subindex)
     DATA_ID_ACTUALS:                                                            ' applicationId == FSSP_ACTUAL1-FSSP_ACTUAL4               '
@@ -369,7 +357,6 @@ pri sensor_getData(physicalId, applicationIdt, subindex) : valuet
     ' not enabled in validid
     DATA_ID_FLVSS:                                                              ' applicationId == FSSP_DATAID_CELLS
       valuet := flv_getData(applicationIdt, subindex)                           ' voltage per cell, 0.002V
-'}
 
 pri querysensorsent(Index) : retv
   return lastsensorindex[Index/_sensornoentries] == 0
@@ -482,6 +469,10 @@ wait   rdpin x, rp              wc                                              
   if_c jmp #wait
     end
 
+pri validid(physicalId) : sensorid
+' is it one of our physical sensors?
+  sensorid := lookdown(physicalId: DATA_ID_FAS, DATA_ID_ACC) ', DATA_ID_GPS, DATA_ID_ACTUALS, DATA_ID_FLOW, DATA_ID_TEMP)
+
 con
   _sensornoentries              = 4                                             ' number entries for each sensor info
 
@@ -502,10 +493,10 @@ _sensors
 '              word      DATA_ID_ACTUALS, FSSP_ACTUAL2,            0,    500     ' $5101, swerve FR
 '              word      DATA_ID_ACTUALS, FSSP_ACTUAL3,            0,    500     ' $5102, swerve BL
 '              word      DATA_ID_ACTUALS, FSSP_ACTUAL4,            0,    500     ' $5103, swerve BR
-'              word      DATA_ID_ACC,     FSSP_DATAID_HEADING,     0,   1000     ' $0840, in deg *100
-'              word      DATA_ID_ACC,     FSSP_DATAID_PITCH,       0,   1000     ' $5230, given in deg *10
-'              word      DATA_ID_ACC,     FSSP_DATAID_ROLL,        0,   1000     ' $5240, given in deg *10
-'              word      DATA_ID_ACC,     SENSOR_APPL_ID_PRESSURE, 0,   1000     ' $5113, hPa *100
+              word      DATA_ID_ACC,     FSSP_DATAID_HEADING,     0,   1000     ' $0840, in deg *100
+              word      DATA_ID_ACC,     FSSP_DATAID_PITCH,       0,   1000     ' $5230, given in deg *10
+              word      DATA_ID_ACC,     FSSP_DATAID_ROLL,        0,   1000     ' $5240, given in deg *10
+              word      DATA_ID_ACC,     SENSOR_APPL_ID_PRESSURE, 0,   1000     ' $5113, hPa *100
               word      DATA_ID_FAS,     FSSP_DATAID_VFAS,        0,   1000     ' $0210, given in 0.01V *100
               word      DATA_ID_FAS,     FSSP_DATAID_CURRENT1,    0,   1000     ' $0201, in 0.1mA
               word      DATA_ID_FAS,     FSSP_DATAID_CURRENT2,    0,   1000     ' $0202, in 0.1mA
