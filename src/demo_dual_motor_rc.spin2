@@ -98,6 +98,7 @@ OBJ { our Drive Subsystem }
     telemetry   : "frskysport"                          ' bidirectional serial port to RC receiver for telemetry, 1 cog
     lidar       : "rplidar"                             ' rplidar A1M8, 1 cog
     imu         : "usfsmax"                             ' imu
+    nn          : "nn_drive"
 
 VAR
     long    remoteCog, telemetryCog, lidarCog
@@ -141,6 +142,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
         usfsavailable := imu.startx(USFSMAX_SCL, USFSMAX_SDA, USFSMAX_RESET, @Config, yawoffset)
         debug(if(usfsavailable), "IMU start error: ", uhex(usfsavailable))
 
+        nn.start()
         remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
         lidarCog := lidar.start(LIDARTX, LIDARRX, LIDARCTL)
@@ -388,8 +390,8 @@ CON
   DELTAANGLE    = 5                                                             ' +- angle when checking distance
   MINDISTANCE   = 500                                                           ' min distance in mm
   FRONTANGLE    = 0                                                             ' angle to front
-  LEFTANGLE     = 270                                                           ' angle to left
-  RIGHTANGLE    = 90                                                            ' angle to right
+  LEFTANGLE     = 90                                                            ' angle to left
+  RIGHTANGLE    = 270                                                           ' angle to right
 
 PRI doAutoRoam() | front_, left_, right_, ltcurrent, rtcurrent
 
