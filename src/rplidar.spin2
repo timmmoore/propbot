@@ -1,7 +1,8 @@
-{RoboPeak RPLIDAR A1M8}
+{RoboPeak RPLIDAR A1M8 R6}
 {
-        4pin      5V, Gnd, tx, rx (tx/rx are 3.3V)
-        3pin      5V, Gnd, control (3.3V works)
+        4pin      tx, rx, 5V, Gnd (tx/rx are 3.3V)
+        3pin      Gnd, control, 5V (3.3V works for control)
+        See rplidar-a1m8-r6.png for pinout
 }
 
 CON
@@ -12,7 +13,7 @@ CON
   LIDAR_BITS                    = 8
   LIDAR_BAUD                    = 115200
 
-  STACK_SIZE_LONGS              = 2000
+  STACK_SIZE_LONGS              = 200
 
   CMD_PACKET_SYNCBYTE           = 0
   CMD_PACKET_CMDFLAG            = 1
@@ -84,9 +85,6 @@ CON
   RESULT_OPERATION_TIMEOUT      = ($8002 | RESULT_FAIL_BIT)
   RPLIDAR_DEFAULT_TIMEOUT       = 500
 
-OBJ
-  utilities     : "utilities"
-
 VAR
   long txpin, rxpin, motorpin
   long Cog, notstopped
@@ -102,7 +100,8 @@ VAR
 
   ' 0 is in front, rotates  anti-clockwise to 359 degrees
   ' front of lidar is opposite end from motor
-  long distance[360]                                                            ' contains distance in mm for angle 0-360
+  ' max distance is 12_000 mm
+  word distance[360]                                                            ' contains distance in mm for angle 0-360
 
   long taskStack[STACK_SIZE_LONGS]
 
@@ -110,19 +109,17 @@ PUB null()
 
 PUB start(txpin_, rxpin_, motorpin_) : ok | clkx
   longmove(@txpin, @txpin_, 3)
-  longfill(@distance, -1, 360)
+  wordfill(@distance, -1, 360)
 
   stop()
 
-  motoroff()
-
   clkx := muldiv64(clkfreq, $1_0000, LIDAR_BAUD) & $FFFFFC00                    ' set bit timing
   clkx |= (LIDAR_BITS-1)                                                        ' set bits (8 data)
-  pinstart(rxpin, LIDARRX, clkx, 0)
-  pinstart(txpin, LIDARTX, clkx, 0)
+  pinstart(rxpin, LIDARRX, clkx, 0)                                             ' config rx pin
+  pinstart(txpin, LIDARTX, clkx, 0)                                             ' config tx pin
 
   notstopped := true
-  ok := Cog := cogspin(NEWCOG, lidarInfo(), @taskStack) + 1
+  ok := Cog := cogspin(NEWCOG, lidarInfo(), @taskStack) + 1                     ' start cog that configures and reads the lidar
 
 PUB stop()
   if Cog                                                                        ' stop lidar reads
@@ -134,7 +131,6 @@ PUB stop()
   motoroff()                                                                    ' make sure motor stopped
   pinclear(txpin)
   pinclear(rxpin)
-  pinclear(motorpin)
 
 PUB checkdistance(angle, deltaangle, distance_) : ok | index
 ' check distances +- delta, if any less than distance then return true
@@ -144,26 +140,26 @@ PUB checkdistance(angle, deltaangle, distance_) : ok | index
       ok := true
 
 PRI motoron()
-  PINHIGH(motorpin)
+  PINHIGH(motorpin)                                                             ' high starts motor
 
 PRI motoroff()
-  PINLOW(motorpin)
+  PINLOW(motorpin)                                                              ' and low stops motor
 
 PRI write(pbytes, nobytes) | index
-
+' write nobytes to lidar
   repeat index from 0 to nobytes-1
     wypin(txpin, byte[pbytes][index])                                           ' send byte
     repeat                                                                      ' wait until flushed
     while pinr(txpin) == 0
 
 PRI read() : rxbyte
-' return -1 if no byte
+' read byte if available from lidar, else return -1 if no byte
   if pinr(rxpin) == 0                                                           ' return -1 if no byte ready
     return -1
   rxbyte := rdpin(rxpin) >> 24                                                  ' get byte
 
 PRI _sendCommand(cmd, ppayload, payloadsize) : ok | byte checksum, byte sizebyte, pos
-
+' send command to lidar
   if payloadsize <> 0 and ppayload <> 0
     cmd |= RPLIDAR_CMDFLAG_HAS_PAYLOAD
 
@@ -208,7 +204,7 @@ PRI _waitResponseHeader(pans, timeout) : ok | recvPos, currentTs, currentbyte
 
   return RESULT_OPERATION_TIMEOUT
 
-PRI getDeviceInfo(pinfobuf, timeout) : ok | recvPos, currentTs, remainingtime, ans, currentbyte, i
+PRI getDeviceInfo(pinfobuf, timeout) : ans | recvPos, currentTs, currentbyte
 '' ask the RPLIDAR for its device info like the serial number
 
   if (ans := _sendCommand(RPLIDAR_CMD_GET_DEVICE_INFO, 0, 0)) & RESULT_FAIL_BIT ' send command to get device info
@@ -232,7 +228,7 @@ PRI getDeviceInfo(pinfobuf, timeout) : ok | recvPos, currentTs, remainingtime, a
     byte[pinfobuf][recvPos++] := currentbyte
 
     if recvPos == RESPONSE_DEVICE_SIZE                                          ' until we have right amount
-      return RESULT_OK
+      return RESULT_OK                                                          ' model, hardware/firmware versions and serial no in buffer
 
   return RESULT_OPERATION_TIMEOUT
 
@@ -310,8 +306,8 @@ PRI lidarInfo() | ldistance, langle, startBit, quality, display
         motoron()                                                               ' and turn motor on
         waitms(1000)                                                            ' dont reduce this, continous error if not ready
 
-  motoroff()
-'
+  motoroff()                                                                    ' turn motor off before exiting
+
 con { license }
 
 {{
