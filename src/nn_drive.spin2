@@ -1,0 +1,109 @@
+{ Neural Network
+  port of
+        http://robotics.hobbizine.com/arduinoann.html
+
+  only drive capability use
+        https://github.com/JonComo/Arduino_weight_trainer
+}
+
+CON
+InputNodes      = 4
+HiddenNodes     = 5
+OutputNodes     = 2
+
+VAR
+  long fOutput[OutputNodes]
+  long fHidden[HiddenNodes]
+
+DAT
+' training data from Arduino_weight_trainer
+fHiddenWeights
+long    0.45395568013191223
+long    0.4757053256034851
+long    -0.4279683232307434
+long    -0.09176859259605408
+long    0.6482440233230591
+long    0.8621890544891357
+long    -0.7398143410682678
+long    0.37026068568229675
+long    0.7414878010749817
+long    -0.7806304693222046
+long    -0.6308004856109619
+long    0.38490909337997437
+long    0.19672584533691406
+long    -0.24321724474430084
+long    0.22933390736579895
+long    -0.40441909432411194
+long    -0.486478716135025
+long    -0.6940135955810547
+long    0.3323665261268616
+long    -0.2535146474838257
+long    0.08859965205192566
+long    0.005978376138955355
+long    -0.054159943014383316
+long    -0.061761144548654556
+long    -0.029761819168925285
+fOutputWeights
+long    0.6683729887008667
+long    0.8098624348640442
+long    0.45899778604507446
+long    -0.3444083631038666
+long    -0.11201092600822449
+long    -0.5956767797470093
+long    -0.19597622752189636
+long    -0.6001916527748108
+long    -0.6834139227867126
+long    0.457400918006897
+long    0.31375622749328613
+long    0.26941293478012085
+
+pub null()
+
+pub start()
+
+VAR
+  long fTestInput[InputNodes]
+
+pub drive_nn(pInput, pOutput) | index, pout
+' input and output: -100 to 100
+
+  repeat index from 0 to InputNodes-1
+    fTestInput[index] := float(long[pInput][index]+100) /. 200.0                ' convert to float 0.0-1.0
+
+  pout := InputToOutput(@fTestInput)                                            ' input to ANN to obtain output
+
+  repeat index from 0 to OutputNodes-1
+    long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert to -100 to 100
+
+pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum
+
+  ' Compute hidden layer activations
+  tempindex := HiddenNodes*InputNodes
+  repeat outer from 0 to HiddenNodes-1
+    faccum := fHiddenWeights[tempindex++]
+    tempindex1 := outer
+    repeat inner from 0 to InputNodes-1
+      faccum := faccum +. (long[pfTestInput][inner] *. fHiddenWeights[tempindex1])
+      tempindex1 += HiddenNodes
+    fHidden[outer] := 1.0 /. (1.0 +. exp(-fAccum))
+
+  ' Compute output layer activations and calculate errors
+  tempindex := OutputNodes*HiddenNodes
+  repeat outer from 0 to OutputNodes-1
+    faccum := fOutputWeights[tempindex++]
+    tempindex1 := outer
+    repeat inner from 0 to HiddenNodes-1
+      faccum := fAccum +. (fHidden[inner] *. fOutputWeights[tempindex1])
+      tempindex1 += OutputNodes
+    fOutput[outer] := 1.0 /. (1.0 +. exp(-fAccum))
+
+  return @fOutput
+
+pri exp(fx) : fsum | fterm, i
+
+  fsum := 1.0
+  fterm := 1.0
+  repeat i from 1 to 10
+    fterm := fterm *. (fx /. float(i))
+    fsum := fsum +. fterm
+'
