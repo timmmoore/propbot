@@ -136,13 +136,14 @@ CON
   fneglimit        = -7.0
 
 pub sigmoid(fin) : result | fsum, fterm, fi, i
-  if frel(fin, fposlimit, FGT)
+' output range -1 to +1
+  if frel(fin, fposlimit, FGT)                          ' >. handle upper limit
     result := 1.0
-  elseif frel(fin, fneglimit, FLT)
+  elseif frel(fin, fneglimit, FLT)                      ' <. handle lower limit
     result := 0.0
   else
     fi := fsum := fterm := 1.0
-    repeat 10
+    repeat 10                                           ' tayor series
       fterm := fterm *. (fin /. fi)
       fi := fi +. 1.0
       fsum := fsum +. fterm
