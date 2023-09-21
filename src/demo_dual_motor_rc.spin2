@@ -145,7 +145,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
         if nn.start() <> 0
           debug(" Neural Network sizes do not match")
 
-        remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @Defaults, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
+        remoteCog := remoteCtl.starttx(SBUS_RX, @Defaults, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
         lidarCog := lidar.start(LIDARTX, LIDARRX, LIDARCTL)
         statusOK := remoteCog <> 0 ? TRUE : FALSE
@@ -233,7 +233,7 @@ VAR
     long    qt[4]
     long    fvoltage
 
-PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, bMinBattery, finalupdate, accrate, bOneRotation, bAutoRoam
+PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, bShowDebugStatus, bEmerCutoff, bShowDriveStates, bMinBattery, finalupdate, accrate, bOneRotation, bAutoRoam, rngMin, rngMax
 '' Listen to FlySky and control motor, get status based on Switch/Joystick inputs
     waitms(500)    ' wait for 1/2 sec for backend to catch up
 
@@ -277,7 +277,9 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
 
         bOneRotation := remoteCtl.swIsOn(remoteCtl.CH_11)
         bAutoRoam := remoteCtl.swIsOn(remoteCtl.CH_12)
-        accrate := remoteCtl.readchannel(remoteCtl.CTL_VRA)/10
+        accrate := remoteCtl.readchannel(remoteCtl.CTL_VRA)
+        rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_VRA)
+        accrate := map(accrate, rngMin, rngMax, 10, 200)
 
         updatetelemetry()
 
@@ -406,20 +408,15 @@ VAR
   long lidarmeas[5]
   byte disp[6]
 
-PRI displaylidar()
+DAT
+lidardisp   byte "L#F#R", 0
+
+PRI updatedisplaylidar() | i
 ' convert lidar detection into displayable string
-  bytefill(@disp, " ", 5)
-  disp[5] := 0
-  if lidarmeas[0]
-    disp[0] := "L"
-  if lidarmeas[1]
-    disp[1] := "#"
-  if lidarmeas[2]
-    disp[2] := "F"
-  if lidarmeas[3]
-    disp[3] := "#"
-  if lidarmeas[4]
-    disp[4] := "R"
+  strcopy(@disp, @lidardisp, 5)
+  repeat i from 0 to 4
+    ifnot lidarmeas[i]
+      disp[i] := " "
 
 PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent
 
@@ -433,7 +430,7 @@ PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent
     lidarmeas[2] := lidar.checkdistance(FRONTANGLE,  DELTAANGLE, MINDISTANCE)   ' front
     lidarmeas[3] := lidar.checkdistance(RIGHT1ANGLE, DELTAANGLE, MINDISTANCE)   ' right front
     lidarmeas[4] := lidar.checkdistance(RIGHT2ANGLE, DELTAANGLE, MINDISTANCE)   ' right
-    displaylidar()
+    updatedisplaylidar()
 
     updatetelemetry()
 
@@ -446,20 +443,20 @@ PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent
     else
       if lidarmeas[2] and lidarmeas[0] and lidarmeas[4]                         ' too close, front, left and right
         ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-        debug("  AutoRoam back: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+        debug("  AutoRoam back: (", zstr_(@disp), ") ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
         wheels.driveDirection(-AUTODRIVE, 0)                                    ' go backwards
       elseif lidarmeas[2]                                                       ' too close in front
         if lidarmeas[0]                                                         ' and left
           ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-          debug("  AutoRoam right: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
-          wheels.driveDirection(AUTODRIVE, AUTOTURN)                            ' turn right
+          debug("  AutoRoam right: (", zstr_(@disp), ") ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+          wheels.driveDirection(AUTODRIVE, -AUTOTURN)                            ' turn right
         else                                                                    ' otherwise
           ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-          debug("  AutoRoam left: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
-          wheels.driveDirection(AUTODRIVE, -AUTOTURN)                           ' turn left
+          debug("  AutoRoam left: (", zstr_(@disp), ") ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+          wheels.driveDirection(AUTODRIVE, AUTOTURN)                           ' turn left
       else
         ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-        debug("  AutoRoam forwards: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))                                              ' nothing in front
+        debug("  AutoRoam forwards: (", zstr_(@disp), ") ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))                                              ' nothing in front
         wheels.driveDirection(AUTODRIVE, 0)                                     ' so forwards
     waitms(250)                                                                 ' let bot move
   while remoteCtl.swIsOn(remoteCtl.CH_12) == false                              ' done?
@@ -511,8 +508,8 @@ PRI map(inValue,  inMin,  inMax,  outMin,  outMax) : outValue
 
 DAT
 '' rc transmitter configuration
-    ctlMinValue     word    0,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172
-    ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810
+    ctlMinValue     word    0,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172
+    ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810
     Defaults        word    1023, 1023,    0, 1023,    0,    0,    0,    0,    0
                     word       0,    0,    0, 1023, 1023, 1023, 1023,    0,    0
     validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CH_12, remoteCtl.CTL_NADA
