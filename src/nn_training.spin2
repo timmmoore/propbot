@@ -16,12 +16,10 @@ OBJ
     utilities   : "utilities"
 
 DAT
-fSuccess                 long 0.0015
-
-DAT
 fLearningRate            long 0.3
 fMomentum                long 0.9
 fInitialWeightMax        long 0.5
+fSuccess                 long 0.0015
 
 fInput {[PatternCount][InputNodes]}
   long 0.0, 1.0, 1.0, 0.0       ' LIGHT ON LEFT AND RIGHT
@@ -94,22 +92,22 @@ pub start()
   repeat p from 0 to PatternCount-1
     RandomizedIndex[p] := p
 
-pri exp(fx) : fsum | fterm
-
-  fsum := 1.0
-  fterm := 1.0
-  repeat i from 1 to 10
-    fterm := fterm *. (fx /. float(i))
-    fsum := fsum +. fterm
+pri rand(r) : result
+  if r == 16
+    result := getrnd() & $0f
+  elseif r == 128
+    result := getrnd() & $7f
+  else
+    result := getrnd() +// r
 
 pub train_nn() | t, t1
 'TRAINS THE NEURAL NETWORK
   debug("Start training")
 
-  debug("exp test1 ", fdec(exp(10.0)))
-  debug("exp test2 ", fdec(exp(-5.0)))
-  debug("exp test3 ", fdec(exp(-440.0)))
-  debug("exp test4 ", fdec(exp(55.0)))
+  debug("exp test1 ", fdec(utilities.sigmoid(10.0)))
+  debug("exp test2 ", fdec(utilities.sigmoid(-5.0)))
+  debug("exp test3 ", fdec(utilities.sigmoid(-440.0)))
+  debug("exp test4 ", fdec(utilities.sigmoid(55.0)))
   debug(`SCOPE_XY MyXY SIZE 120 COLOR black black RANGE 1_000_000 SAMPLES 0 'MSE')
   prog_start := 0
   debug("training init ", sdec(HiddenNodes), " ", sdec(InputNodes))
@@ -119,7 +117,7 @@ pub train_nn() | t, t1
     repeat j from 0 to InputNodes
       t := HiddenNodes*j
       fChangeHiddenWeights[t+i] := 0.0
-      fRando := float(GETRND()+//100) /. 100.0
+      fRando := float(rand(128)) /. 128.0
       fHiddenWeights[t+i] := 2.0 *. (fRando -. 0.5) *. fInitialWeightMax
       debug("rand pattern ", sdec(i), " ", sdec(j), " ", sdec(t), " ", fdec(fChangeHiddenWeights[t+i]), " ", fdec(fHiddenWeights[t+i]))
 
@@ -129,7 +127,7 @@ pub train_nn() | t, t1
     repeat j from 0 to HiddenNodes
       t := OutputNodes*j
       fChangeOutputWeights[t+i] := 0.0
-      fRando := float(GETRND()+//100) /. 100.0
+      fRando := float(rand(128)) /. 128.0
       fOutputWeights[t+i] := 2.0 *. (fRando -. 0.5) *. fInitialWeightMax
       debug("rand pattern1 ", sdec(i), " ", sdec(j), " ", sdec(t), " ", fdec(fChangeOutputWeights[t+i]), " ", fdec(fOutputWeights[t+i]))
 
@@ -140,7 +138,7 @@ pub train_nn() | t, t1
     'debug("training cycle1 ", sdec(PatternCount))
     ' Randomize order of training patterns
     repeat p from 0 to PatternCount-1
-      q := GETRND()+//PatternCount
+      q := rand(PatternCount)
       RandomizedIndex[p], RandomizedIndex[q] := RandomizedIndex[q], RandomizedIndex[p]
     fError := 0.0
     'debug("training cycle1a ", sdec(p), " ", sdec(q), " ", sdec(r))
@@ -158,7 +156,7 @@ pub train_nn() | t, t1
         fAccum := fHiddenWeights[t+i]
         repeat j from 0 to InputNodes-1
           fAccum := fAccum +. fInput[(InputNodes*p)+j] *. fHiddenWeights[(HiddenNodes*j)+i]
-        fHidden[i] := 1.0 /. (1.0 +. exp(-fAccum))
+        fHidden[i] := utilities.sigmoid(fAccum)
       'debug("training cycle4 ", sdec(OutputNodes), " ", fdec(Error))
 
       ' Compute output layer activations and calculate errors
@@ -167,7 +165,7 @@ pub train_nn() | t, t1
         fAccum := fOutputWeights[t+i]
         repeat j from 0 to HiddenNodes-1
           fAccum := fAccum +. fHidden[j] *. fOutputWeights[(OutputNodes*j)+i]
-        fOutput[i] := 1.0 /. (1.0 +. exp(-fAccum))
+        fOutput[i] := utilities.sigmoid(fAccum)
         t1 := OutputNodes*p
         fOutputDelta[i] := (fTarget[t1+i] -. fOutput[i]) *. fOutput[i] *. (1.0 -. fOutput[i])
         if NAN(fError)
