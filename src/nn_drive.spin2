@@ -7,9 +7,12 @@
 }
 
 CON
-InputNodes      = 4
-HiddenNodes     = 5
+InputNodes      = 5
+HiddenNodes     = 6
 OutputNodes     = 2
+
+OBJ
+    utilities   : "utilities"
 
 VAR
   long fOutput[OutputNodes]
@@ -17,49 +20,73 @@ VAR
 
 DAT
 ' training data from Arduino_weight_trainer
+' WARNING: sizes below and input/hidden/output nodes sizes must match
 fHiddenWeights
-long    0.45395568013191223
-long    0.4757053256034851
-long    -0.4279683232307434
-long    -0.09176859259605408
-long    0.6482440233230591
-long    0.8621890544891357
-long    -0.7398143410682678
-long    0.37026068568229675
-long    0.7414878010749817
-long    -0.7806304693222046
-long    -0.6308004856109619
-long    0.38490909337997437
-long    0.19672584533691406
-long    -0.24321724474430084
-long    0.22933390736579895
-long    -0.40441909432411194
-long    -0.486478716135025
-long    -0.6940135955810547
-long    0.3323665261268616
-long    -0.2535146474838257
-long    0.08859965205192566
-long    0.005978376138955355
-long    -0.054159943014383316
-long    -0.061761144548654556
-long    -0.029761819168925285
+long  0.21134984493255615
+long  -0.006911986507475376
+long  0.11779005080461502
+long  -0.39168646931648254
+long  0.6752384305000305
+long  -0.5866423845291138
+long  -0.2975810766220093
+long  -0.5601735711097717
+long  0.5492990612983704
+long  -0.2682107388973236
+long  -0.3833119571208954
+long  -0.7302111387252808
+long  0.08133271336555481
+long  -0.04117460548877716
+long  0.32272472977638245
+long  0.3761758804321289
+long  -0.4141826331615448
+long  0.11719145625829697
+long  -0.13441094756126404
+long  -0.20437516272068024
+long  -0.07803918421268463
+long  -0.4805698096752167
+long  -0.23574508726596832
+long  0.007259433623403311
+long  0.2256428301334381
+long  0.2824275493621826
+long  0.39907294511795044
+long  0.333750456571579
+long  0.4863360822200775
+long  -0.18421441316604614
+long  0.016523784026503563
+long  -0.007929526269435883
+long  -0.007134068291634321
+long  0.009907398372888565
+long  0.005352230276912451
+long  -0.006631459109485149
+fEndHiddenWeights
 fOutputWeights
-long    0.6683729887008667
-long    0.8098624348640442
-long    0.45899778604507446
-long    -0.3444083631038666
-long    -0.11201092600822449
-long    -0.5956767797470093
-long    -0.19597622752189636
-long    -0.6001916527748108
-long    -0.6834139227867126
-long    0.457400918006897
-long    0.31375622749328613
-long    0.26941293478012085
+long  0.5352723598480225
+long  -0.8408554196357727
+long  0.44115740060806274
+long  0.6798343658447266
+long  -0.4171541631221771
+long  0.7644716501235962
+long  0.3567945659160614
+long  -0.49026328325271606
+long  -0.6983018517494202
+long  -0.5626979470252991
+long  0.04548772796988487
+long  0.7724423408508301
+long  0.018218133598566055
+long  -0.07003289461135864
+fEndOutputWeights
 
 pub null()
 
-pub start()
+pub start() : result
+
+  if (@fEndHiddenWeights-@fHiddenWeights)/4 <> (InputNodes+1)*HiddenNodes
+    debug(" Hidden weight size mis-match ", udec((fEndHiddenWeights-fHiddenWeights)/4), " ", udec((InputNodes+1)*HiddenNodes))
+    return 1
+  if (@fEndOutputWeights-@fOutputWeights)/4 <> (HiddenNodes + 1)*OutputNodes
+    debug(" Output weight size mis-match ", udec((fEndOutputWeights-fOutputWeights)/4), " ", udec((HiddenNodes + 1)*OutputNodes))
+    return 2
+  return 0
 
 VAR
   long fTestInput[InputNodes]
@@ -85,7 +112,7 @@ pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, 
     repeat inner from 0 to InputNodes-1
       faccum := faccum +. (long[pfTestInput][inner] *. fHiddenWeights[tempindex1])
       tempindex1 += HiddenNodes
-    fHidden[outer] := 1.0 /. (1.0 +. exp(-fAccum))
+    fHidden[outer] := utilities.sigmoid(fAccum)
 
   ' Compute output layer activations and calculate errors
   tempindex := OutputNodes*HiddenNodes
@@ -95,15 +122,7 @@ pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, 
     repeat inner from 0 to HiddenNodes-1
       faccum := fAccum +. (fHidden[inner] *. fOutputWeights[tempindex1])
       tempindex1 += OutputNodes
-    fOutput[outer] := 1.0 /. (1.0 +. exp(-fAccum))
+    fOutput[outer] := utilities.sigmoid(fAccum)
 
   return @fOutput
-
-pri exp(fx) : fsum | fterm, i
-
-  fsum := 1.0
-  fterm := 1.0
-  repeat i from 1 to 10
-    fterm := fterm *. (fx /. float(i))
-    fsum := fsum +. fterm
 '
