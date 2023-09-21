@@ -98,7 +98,7 @@ OBJ { our Drive Subsystem }
     telemetry   : "frskysport"                          ' bidirectional serial port to RC receiver for telemetry, 1 cog
     lidar       : "rplidar"                             ' rplidar A1M8, 1 cog
     imu         : "usfsmax"                             ' imu
-    nn          : "nn_drive"
+    nn          : "nn_drive"                            ' neural network auto drive
 
 VAR
     long    remoteCog, telemetryCog, lidarCog
@@ -142,7 +142,9 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
         usfsavailable := imu.startx(USFSMAX_SCL, USFSMAX_SDA, USFSMAX_RESET, @Config, yawoffset)
         debug(if(usfsavailable), "IMU start error: ", uhex(usfsavailable))
 
-        nn.start()
+        if nn.start() <> 0
+          debug(" Neural Network sizes do not match")
+
         remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
         lidarCog := lidar.start(LIDARTX, LIDARRX, LIDARCTL)
@@ -246,6 +248,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
     debug("* swC DN     - end control")
     debug("* swD DN     - emer cutoff")
     debug("* swE DN     - 1 rotation")
+    debug("* swH DN     - autonomous")
     debug("* VRA        - acceleration")
     debug("------")
 
@@ -385,43 +388,64 @@ PRI updatetelemetry()
     telemetry.setcurrent(nLtmAmps, nRtmAmps)                                    ' current
 
 CON
+  ' LIDAR measurements
+  FRONTANGLE    = 0                                                             ' angle to front
+  LEFT1ANGLE    = 45                                                            ' angle to left
+  LEFT2ANGLE    = 90                                                            ' angle to left
+  RIGHT1ANGLE   = 315                                                           ' angle to right
+  RIGHT2ANGLE   = 270                                                           ' angle to right
+  DELTAANGLE    = 13                                                            ' +- angle when checking distance
+  MINDISTANCE   = 500                                                           ' min distance in mm
+  ' manual drive speeds
   AUTODRIVE     = 10                                                            ' drive speed
   AUTOTURN      = 100                                                           ' turning speed
-  DELTAANGLE    = 5                                                             ' +- angle when checking distance
-  MINDISTANCE   = 500                                                           ' min distance in mm
-  FRONTANGLE    = 0                                                             ' angle to front
-  LEFTANGLE     = 90                                                            ' angle to left
-  RIGHTANGLE    = 270                                                           ' angle to right
+  ' nn information
+  NNAUTONOMOUS  = true                                                          ' trueif use
+  NNSPEEDRATIO  = 5                                                             ' ratio to slowdown bot
 
-PRI doAutoRoam() | front_, left_, right_, ltcurrent, rtcurrent
+VAR
+    long lidarmeas[5]
+
+PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent
 
   ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
   updatetelemetry()
   debug("  AutoRoam: ",  fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
 
   repeat
-    front_ := lidar.checkdistance(FRONTANGLE, DELTAANGLE, MINDISTANCE)          ' check front, left and right
-    left_  := lidar.checkdistance(LEFTANGLE,  DELTAANGLE, MINDISTANCE)
-    right_ := lidar.checkdistance(RIGHTANGLE, DELTAANGLE, MINDISTANCE)
+    lidarmeas[0] := lidar.checkdistance(LEFT2ANGLE,  DELTAANGLE, MINDISTANCE)   ' left
+    lidarmeas[1] := lidar.checkdistance(LEFT1ANGLE,  DELTAANGLE, MINDISTANCE)   ' left front
+    lidarmeas[2] := lidar.checkdistance(FRONTANGLE,  DELTAANGLE, MINDISTANCE)   ' front
+    lidarmeas[3] := lidar.checkdistance(RIGHT1ANGLE, DELTAANGLE, MINDISTANCE)   ' right front
+    lidarmeas[4] := lidar.checkdistance(RIGHT2ANGLE, DELTAANGLE, MINDISTANCE)   ' right
     updatetelemetry()
 
-    if front_ and left_ and right_                                              ' too close, front, left and right
+    if NNAUTONOMOUS                                                             ' nn or manual autonomous
       ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-      debug("  AutoRoam back: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
-      wheels.driveDirection(-AUTODRIVE, 0)                                      ' go backwards
-    elseif front_                                                               ' too close in front
-      if left_                                                                  ' and left
-        ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-        debug("  AutoRoam right: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
-        wheels.driveDirection(AUTODRIVE, AUTOTURN)                              ' turn right
-      else                                                                      ' otherwise
-        ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-        debug("  AutoRoam left: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
-        wheels.driveDirection(AUTODRIVE, -AUTOTURN)                             ' turn left
+      debug("  AutoRoam tracking: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+      nn.drive_nn(@lidarmeas, @ltmotor)                                         ' give lidar readings to nn, get left/right motor power
+      ltmotor /= NNSPEEDRATIO                                                              ' slowdown
+      rtmotor /= NNSPEEDRATIO
+      wheels.driveAtPower(ltmotor, rtmotor)
     else
-      ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-      debug("  AutoRoam forwards: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))                                              ' nothing in front
-      wheels.driveDirection(AUTODRIVE, 0)                                       ' so forwards
+      if lidarmeas[2] and lidarmeas[0] and lidarmeas[4]                         ' too close, front, left and right
+        ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+        debug("  AutoRoam back: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+        wheels.driveDirection(-AUTODRIVE, 0)                                    ' go backwards
+      elseif lidarmeas[2]                                                       ' too close in front
+        if lidarmeas[0]                                                         ' and left
+          ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+          debug("  AutoRoam right: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+          wheels.driveDirection(AUTODRIVE, AUTOTURN)                            ' turn right
+        else                                                                    ' otherwise
+          ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+          debug("  AutoRoam left: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+          wheels.driveDirection(AUTODRIVE, -AUTOTURN)                           ' turn left
+      else
+        ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+        debug("  AutoRoam forwards: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))                                              ' nothing in front
+        wheels.driveDirection(AUTODRIVE, 0)                                     ' so forwards
+    waitms(250)                                                                 ' let bot move
   while remoteCtl.swIsOn(remoteCtl.CH_12) == false                              ' done?
 
   wheels.driveDirection(0, 0)                                                   ' stop bot before leaving autoroam
