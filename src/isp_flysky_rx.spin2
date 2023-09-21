@@ -84,7 +84,7 @@ pub starttx(desiredRxPin, pctlMin, pctlMax, pvalidsw, pvalid3W, tmaxctrls) : cog
     if cog == 0
         debug("!!ERROR!!  failed to start SBUS Cog")
     waitms(250)
-    showSbus()
+    showSbus(true)
 
 pub stop()
     '' Stop cogs, release pins
@@ -166,19 +166,22 @@ PUB readSw3Way(swChan) : eSwState | rawValue
         'term.fstr2(string("- readSw3Way(%d) - %d\r\n"), validSwChan, eSwState)
         debug("- readSw3Way(", udec_(swChan), ") - ", udec(eSwState))
 
-PUB showSbus() | ch, pos, x, y
+PUB showSbus(display) : result | ch, pos, x, y
     '' Show status indication
 
     if (sbus.has_signal())
         'term.fstr0(string("- SBUS OK Online\r\n"))
-        debug("- SBUS OK Online")
+        debug(if(display),"- SBUS OK Online")
+        result := 0
     else
         if (sbus.in_failsafe())
             'term.fstr0(string("- SBUS Error FAILSAFE\r\n"))
-            debug("- SBUS Error FAILSAFE")
+            debug(if(display),"- SBUS Error FAILSAFE")
+            result := 1
         else
             'term.fstr0(string("- SBUS Error FRAME LOST\r\n"))
-            debug("- SBUS Error FRAME LOST")
+            debug(if(display),"- SBUS Error FRAME LOST")
+            result := 2
 
 PUB manualCalibrate()
     '' Prompt and let user set controls to get best readings...
