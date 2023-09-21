@@ -145,7 +145,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
         if nn.start() <> 0
           debug(" Neural Network sizes do not match")
 
-        remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
+        remoteCog := remoteCtl.starttx(SBUS_RX, @ctlMinValue, @ctlMaxValue, @Defaults, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
         lidarCog := lidar.start(LIDARTX, LIDARRX, LIDARCTL)
         statusOK := remoteCog <> 0 ? TRUE : FALSE
@@ -399,7 +399,7 @@ CON
   AUTODRIVE     = 10                                                            ' drive speed
   AUTOTURN      = 100                                                           ' turning speed
   ' nn information
-  NNAUTONOMOUS  = true                                                          ' trueif use
+  NNAUTONOMOUS  = false 'true                                                          ' true if use NN
   NNSPEEDRATIO  = 1                                                             ' ratio to slowdown bot
 
 VAR
@@ -506,17 +506,15 @@ PRI map(inValue,  inMin,  inMax,  outMin,  outMax) : outValue
     The map() function uses integer math so will not generate fractions, when the math might indicate that
     it should do so. Fractional remainders are truncated, and are not rounded or averaged.
 }
-    if (inValue <= inMin)
-        outValue := outMin
-    elseif (inValue >= inMax)
-        outValue :=  outMax
-    else
-        outValue := (inValue - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
+  inValue := inMin #> inValue <# inMax
+  outValue := (inValue - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
 
 DAT
 '' rc transmitter configuration
     ctlMinValue     word    0,  172,  172,  172,  172,  172,  172,  172,  172,  172,  172
     ctlMaxValue     word    0, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810, 1810
+    Defaults        word    1023, 1023,    0, 1023,    0,    0,    0,    0,    0
+                    word       0,    0,    0, 1023, 1023, 1023, 1023,    0,    0
     validswitches   byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CH_12, remoteCtl.CTL_NADA
     valid3Ways      byte    remoteCtl.CTL_SW_A, remoteCtl.CTL_SW_B, remoteCtl.CTL_SW_C, remoteCtl.CTL_SW_D, remoteCtl.CH_11, remoteCtl.CTL_NADA
 
