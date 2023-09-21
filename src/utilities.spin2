@@ -131,6 +131,23 @@ pub cart_pol(x, y) : r, t
     getqx     t
   end
 '
+CON
+  fposlimit        = 7.0
+  fneglimit        = -7.0
+
+pub sigmoid(fin) : result | fsum, fterm, fi, i
+  if frel(fin, fposlimit, FGT)
+    result := 1.0
+  elseif frel(fin, fneglimit, FLT)
+    result := 0.0
+  else
+    fi := fsum := fterm := 1.0
+    repeat 10
+      fterm := fterm *. (fin /. fi)
+      fi := fi +. 1.0
+      fsum := fsum +. fterm
+    result := 1.0 /. (1.0 +. fsum)
+
 con { license }
 
 {{
