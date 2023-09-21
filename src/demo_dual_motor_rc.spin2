@@ -276,9 +276,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
         remoteCtl.showDebug(FALSE)
 
         bOneRotation := remoteCtl.swIsOn(remoteCtl.CH_11)
-
         bAutoRoam := remoteCtl.swIsOn(remoteCtl.CH_12)
-
         accrate := remoteCtl.readchannel(remoteCtl.CTL_VRA)/10
 
         updatetelemetry()
@@ -348,6 +346,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
             elseif bAutoRoam == false and nDoingAutoRoam == false               ' no emergency cutoff and no joystick before accept autoroam
                 nDoingAutoRoam := true
                 doAutoRoam()
+                nDoingAutoRoam := false
 
         'if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
         if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)
@@ -401,16 +400,32 @@ CON
   AUTOTURN      = 100                                                           ' turning speed
   ' nn information
   NNAUTONOMOUS  = true                                                          ' trueif use
-  NNSPEEDRATIO  = 5                                                             ' ratio to slowdown bot
+  NNSPEEDRATIO  = 1                                                             ' ratio to slowdown bot
 
 VAR
-    long lidarmeas[5]
+  long lidarmeas[5]
+  byte disp[6]
+
+PRI displaylidar()
+' convert lidar detection into displayable string
+  bytefill(@disp, " ", 5)
+  disp[5] := 0
+  if lidarmeas[0]
+    disp[0] := "L"
+  if lidarmeas[1]
+    disp[1] := "#"
+  if lidarmeas[2]
+    disp[2] := "F"
+  if lidarmeas[3]
+    disp[3] := "#"
+  if lidarmeas[4]
+    disp[4] := "R"
 
 PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent
 
   ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
   updatetelemetry()
-  debug("  AutoRoam: ",  fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+  debug("  AutoRoam: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
 
   repeat
     lidarmeas[0] := lidar.checkdistance(LEFT2ANGLE,  DELTAANGLE, MINDISTANCE)   ' left
@@ -418,14 +433,15 @@ PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent
     lidarmeas[2] := lidar.checkdistance(FRONTANGLE,  DELTAANGLE, MINDISTANCE)   ' front
     lidarmeas[3] := lidar.checkdistance(RIGHT1ANGLE, DELTAANGLE, MINDISTANCE)   ' right front
     lidarmeas[4] := lidar.checkdistance(RIGHT2ANGLE, DELTAANGLE, MINDISTANCE)   ' right
+    displaylidar()
+
     updatetelemetry()
 
     if NNAUTONOMOUS                                                             ' nn or manual autonomous
       ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
       debug("  AutoRoam tracking: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
       nn.drive_nn(@lidarmeas, @ltmotor)                                         ' give lidar readings to nn, get left/right motor power
-      ltmotor /= NNSPEEDRATIO                                                              ' slowdown
-      rtmotor /= NNSPEEDRATIO
+      debug("  AutoRoam tracking1: (", zstr_(@disp), ") ", sdec(ltmotor), " ", sdec(rtmotor))
       wheels.driveAtPower(ltmotor, rtmotor)
     else
       if lidarmeas[2] and lidarmeas[0] and lidarmeas[4]                         ' too close, front, left and right
