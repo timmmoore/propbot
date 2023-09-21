@@ -102,6 +102,8 @@ VAR
   ' front of lidar is opposite end from motor
   ' max distance is 12_000 mm
   word distance[360]                                                            ' contains distance in mm for angle 0-360
+  word disrotation[360]
+  word rotations
 
   long taskStack[STACK_SIZE_LONGS]
 
@@ -109,7 +111,6 @@ PUB null()
 
 PUB start(txpin_, rxpin_, motorpin_) : ok | clkx
   longmove(@txpin, @txpin_, 3)
-  wordfill(@distance, -1, 360)
 
   stop()
 
@@ -128,15 +129,24 @@ PUB stop()
     cogstop(Cog-1)
     Cog := 0                                                                    ' force stopped
 
+  wordfill(@distance, $ffff, 360)                                               ' long distance
+  longfill(@disrotation, 0, 360)                                                ' reset rotations
+  rotations := 0
+
   motoroff()                                                                    ' make sure motor stopped
   pinclear(txpin)
   pinclear(rxpin)
 
-PUB checkdistance(angle, deltaangle, distance_) : ok | index
+PUB checkdistance(angle, deltaangle, distance_) : ok | index, current
 ' check distances +- delta, if any less than distance then return true
 ' return false if there is nothing < distance @ angle +- deltaangle
+  current := getms()
+  'debug("checkdistance ", sdec(angle), " ", sdec(deltaangle), " ", sdec(distance_))
   repeat index from angle-deltaangle to angle+deltaangle
-    if distance[(index+360)//360] < distance_                                   ' in case -ve and/or over 360
+    if disrotation[(index+360)//360] + 5 +< rotations                           ' more than 5 rotations old
+      next
+    if distance[(index+360)//360] +< distance_                                  ' in case -ve and/or over 360
+      'debug("checkdistance ", sdec(index), " ", sdec_((index+360)//360), " ", sdec_(distance[(index+360)//360]), " ", sdec(distance_))
       ok := true
 
 PRI motoron()
@@ -284,7 +294,7 @@ PUB getCurrentPoint() : cdistance, cangle, startBit, quality
 ' get last measurement
   cdistance := RPLidarMeasurementDistance                                       ' distance value in mm unit
   cangle := 0 #> RPLidarMeasurementAngle <# 359                                 ' angle value in degree and in range
-  cangle := (360 + 90 - cangle)//360                                            ' correct for polar scope_xy - invert and add 90
+  cangle := (360 - cangle)//360                                                 ' correct for polar scope_xy - invert
   startBit := RPLidarMeasurementStartBit                                        ' whether this point is belong to a new scan
   quality := RPLidarMeasurementQuality                                          ' quality of the current measurement
 
@@ -295,7 +305,11 @@ PRI lidarInfo() | ldistance, langle, startBit, quality, display
   repeat while notstopped
     ifnot waitPoint(RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT
       ldistance, langle, startBit, quality := getCurrentPoint()
-      distance[langle] := ldistance                                             ' store in distance per angle array
+      if startBit
+        rotations++
+      if ldistance <> 0
+        distance[langle] := ldistance                                           ' store in distance per angle array
+        disrotation[langle] := rotations
       'ifnot (display := (display + 1) & $1f)                                   ' every 32 so can keep up but not factor of 360
       '  debug(`s `(ldistance, langle))
     else
