@@ -72,15 +72,15 @@ PUB null()
     '' This is not a top-level object
 
 pub start(desiredRxPin) : cog
-  cog := starttx(desiredRxPin, @ctlMinValue, @ctlMaxValue, @Defaults, @validswitches, @valid3Ways, MAX_CTLS)
+  cog := starttx(desiredRxPin, @Defaults, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, MAX_CTLS)
 
-pub starttx(desiredRxPin, pctlMin, pctlMax, pDefaults, pvalidsw, pvalid3W, tmaxctrls) : cog
+pub starttx(desiredRxPin, pDefaults_, pctlMin, pctlMax, pvalidsw, pvalid3W, tmaxctrls) : cog
 '' Configure IO and objects for application
 '' config of min/max channel values
 '' config allowed switch and 3way switches
     longmove(@pctlMinValue, @pctlMin, 5)
     bShowDebug := FALSE ' default
-    cog := sbus.start(desiredRxPin, pDefaults)                                  ' start s.bus rx
+    cog := sbus.start(desiredRxPin, pDefaults_)                                  ' start s.bus rx
     if cog == 0
         debug("!!ERROR!!  failed to start SBUS Cog")
     waitms(250)
