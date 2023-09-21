@@ -22,57 +22,57 @@ DAT
 ' training data from Arduino_weight_trainer
 ' WARNING: sizes below and input/hidden/output nodes sizes must match
 fHiddenWeights
-long  0.21134984493255615
+long  0.21134984493255615      ' 0
 long  -0.006911986507475376
-long  0.11779005080461502
+long  0.11779005080461502      ' 2
 long  -0.39168646931648254
-long  0.6752384305000305
+long  0.6752384305000305       ' 4
 long  -0.5866423845291138
-long  -0.2975810766220093
+long  -0.2975810766220093      ' 6
 long  -0.5601735711097717
-long  0.5492990612983704
+long  0.5492990612983704       ' 8
 long  -0.2682107388973236
-long  -0.3833119571208954
+long  -0.3833119571208954      ' 10
 long  -0.7302111387252808
-long  0.08133271336555481
+long  0.08133271336555481      ' 12
 long  -0.04117460548877716
-long  0.32272472977638245
+long  0.32272472977638245      ' 14
 long  0.3761758804321289
-long  -0.4141826331615448
+long  -0.4141826331615448      ' 16
 long  0.11719145625829697
-long  -0.13441094756126404
+long  -0.13441094756126404     ' 18
 long  -0.20437516272068024
-long  -0.07803918421268463
+long  -0.07803918421268463     ' 20
 long  -0.4805698096752167
-long  -0.23574508726596832
+long  -0.23574508726596832     ' 22
 long  0.007259433623403311
-long  0.2256428301334381
+long  0.2256428301334381       ' 24
 long  0.2824275493621826
-long  0.39907294511795044
+long  0.39907294511795044      ' 26
 long  0.333750456571579
-long  0.4863360822200775
+long  0.4863360822200775       ' 28
 long  -0.18421441316604614
-long  0.016523784026503563
+long  0.016523784026503563     ' 30
 long  -0.007929526269435883
-long  -0.007134068291634321
+long  -0.007134068291634321    ' 32
 long  0.009907398372888565
-long  0.005352230276912451
+long  0.005352230276912451     ' 34
 long  -0.006631459109485149
 fEndHiddenWeights
 fOutputWeights
-long  0.5352723598480225
+long  0.5352723598480225        ' 0
 long  -0.8408554196357727
-long  0.44115740060806274
+long  0.44115740060806274       ' 2
 long  0.6798343658447266
-long  -0.4171541631221771
+long  -0.4171541631221771       ' 4
 long  0.7644716501235962
-long  0.3567945659160614
+long  0.3567945659160614        ' 6
 long  -0.49026328325271606
-long  -0.6983018517494202
+long  -0.6983018517494202       ' 8
 long  -0.5626979470252991
-long  0.04548772796988487
+long  0.04548772796988487       ' 10
 long  0.7724423408508301
-long  0.018218133598566055
+long  0.018218133598566055      ' 12
 long  -0.07003289461135864
 fEndOutputWeights
 
@@ -92,26 +92,27 @@ VAR
   long fTestInput[InputNodes]
 
 pub drive_nn(pInput, pOutput) | index, pout
-' input and output: -100 to 100
+' input: boolean, lidar detection (L, FL, F, FR, R)
+' output: -100 to 100, left/right motor speed
 
   repeat index from 0 to InputNodes-1
-    fTestInput[index] := float(long[pInput][index]+100) /. 200.0                ' convert to float 0.0-1.0
+    fTestInput[index] := long[pInput][index]? 1.0 : 0.0                         ' convert boolean to float 0.0-1.0
 
-  pout := InputToOutput(@fTestInput)                                            ' input to ANN to obtain output
+  pout := InputToOutput(@fTestInput)                                            ' input to NN to obtain output
 
   repeat index from 0 to OutputNodes-1
-    long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert to -100 to 100
+    long[pOutput][index] := round(long[pout][index] *. 100.0)                   ' convert -1 <=> +1 to -100 to 100
 
 pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum
 
   ' Compute hidden layer activations
-  tempindex := HiddenNodes*InputNodes
+  tempindex := InputNodes*HiddenNodes
   repeat outer from 0 to HiddenNodes-1
     faccum := fHiddenWeights[tempindex++]
     tempindex1 := outer
     repeat inner from 0 to InputNodes-1
       faccum := faccum +. (long[pfTestInput][inner] *. fHiddenWeights[tempindex1])
-      tempindex1 += HiddenNodes
+      tempindex1 += InputNodes
     fHidden[outer] := utilities.sigmoid(fAccum)
 
   ' Compute output layer activations and calculate errors
