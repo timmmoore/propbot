@@ -113,6 +113,10 @@ pub train_nn() | t, t1
   debug("training init ", sdec(HiddenNodes), " ", sdec(InputNodes))
 
   ' Initialize HiddenWeights and ChangeHiddenWeights
+  'float ChangeHiddenWeights[InputNodes + 1][HiddenNodes];
+  'long fChangeHiddenWeights[(InputNodes + 1)*HiddenNodes]
+  'float HiddenWeights[InputNodes + 1][HiddenNodes];
+  'long fHiddenWeights[(InputNodes + 1)*HiddenNodes]
   repeat i from 0 to HiddenNodes-1
     repeat j from 0 to InputNodes
       t := HiddenNodes*j
@@ -122,6 +126,8 @@ pub train_nn() | t, t1
       debug("rand pattern ", sdec(i), " ", sdec(j), " ", sdec(t), " ", fdec(fChangeHiddenWeights[t+i]), " ", fdec(fHiddenWeights[t+i]))
 
   ' Initialize OutputWeights and ChangeOutputWeights
+  ' float ChangeOutputWeights[HiddenNodes + 1][OutputNodes];
+  ' float OutputWeights[HiddenNodes + 1][OutputNodes];
   debug("training init1 ", sdec(OutputNodes), " ", sdec(HiddenNodes))
   repeat i from 0 to OutputNodes-1
     repeat j from 0 to HiddenNodes
@@ -151,7 +157,8 @@ pub train_nn() | t, t1
 
       'debug("training cycle3 ", sdec(HiddenNodes), " ", fdec(Error))
       ' Compute hidden layer activations
-      t := HiddenNodes*InputNodes
+      'float HiddenWeights[InputNodes + 1][HiddenNodes];
+      t := InputNodes*HiddenNodes
       repeat i from 0 to HiddenNodes-1
         fAccum := fHiddenWeights[t+i]
         repeat j from 0 to InputNodes-1
@@ -160,7 +167,8 @@ pub train_nn() | t, t1
       'debug("training cycle4 ", sdec(OutputNodes), " ", fdec(Error))
 
       ' Compute output layer activations and calculate errors
-      t := OutputNodes*HiddenNodes
+      'float OutputWeights[HiddenNodes + 1][OutputNodes];
+      t := HiddenNodes*OutputNodes
       repeat i from 0 to OutputNodes-1
         fAccum := fOutputWeights[t+i]
         repeat j from 0 to HiddenNodes-1
@@ -170,12 +178,13 @@ pub train_nn() | t, t1
         fOutputDelta[i] := (fTarget[t1+i] -. fOutput[i]) *. fOutput[i] *. (1.0 -. fOutput[i])
         if NAN(fError)
           debug("training error1 ", sdec(i), " ", sdec(j), " ", sdec(q), " ", sdec(p), " ", fdec(fError), " ", fdec(fTarget[OutputNodes*p+i]), " ", fdec(fOutput[i]))
-        fError := fError +. 0.5 *. (fTarget[t+i] -. fOutput[i]) *. (fTarget[t+i] -. fOutput[i])
+        fError := fError +. 0.5 *. (fTarget[t1+i] -. fOutput[i]) *. (fTarget[t1+i] -. fOutput[i])
         if NAN(fError)
           debug("training error2 ", sdec(i), " ", sdec(j), " ", sdec(q), " ", sdec(p), " ", fdec(fError), " ", fdec(fTarget[OutputNodes*p+i]), " ", fdec(fOutput[i]))
 
       'debug("training cycle5 ", sdec(HiddenNodes), " ", fdec(Error))
       ' Backpropagate errors to hidden layer
+      'float OutputWeights[HiddenNodes + 1][OutputNodes];
       repeat i from 0 to HiddenNodes-1
         fAccum := 0.0
         repeat j from 0 to OutputNodes-1
@@ -184,7 +193,9 @@ pub train_nn() | t, t1
 
       'debug("training cycle6 ", sdec(HiddenNodes), " ", fdec(Error))
       ' Update Inner-->Hidden Weights
-      t := HiddenNodes*InputNodes
+      'float ChangeHiddenWeights[InputNodes + 1][HiddenNodes];
+      'float HiddenWeights[InputNodes + 1][HiddenNodes];
+      t := InputNodes*HiddenNodes
       repeat i from 0 to HiddenNodes-1
         fChangeHiddenWeights[t+i] := fLearningRate *. fHiddenDelta[i] +. fMomentum *. fChangeHiddenWeights[t+i]
         fHiddenWeights[t+i] := fHiddenWeights[t+i] +. fChangeHiddenWeights[t+i]
@@ -195,7 +206,9 @@ pub train_nn() | t, t1
 
       'debug("training cycle7 ", sdec(OutputNodes), " ", fdec(Error))
       ' Update Hidden-->Output Weights
-      t := OutputNodes*HiddenNodes
+      'float ChangeOutputWeights[HiddenNodes + 1][OutputNodes];
+      'float OutputWeights[HiddenNodes + 1][OutputNodes];
+      t := HiddenNodes*OutputNodes
       repeat i from 0 to OutputNodes-1
         fChangeOutputWeights[t+i] := fLearningRate *. fOutputDelta[i] +. fMomentum *. fChangeOutputWeights[t+i]
         fOutputWeights[t+i] := fOutputWeights[t+i] +. fChangeOutputWeights[t+i]
@@ -211,10 +224,7 @@ pub train_nn() | t, t1
       'debug("TrainingCycle: ", sdec(TrainingCycle), " Error: ", sdec(Error))
       debug(`MyXY `(TrainingCycle/100-1_000_000,round(fError*.100_000.0)))
 
-      if (TrainingCycle == 1)
-        ReportEvery1000 := 99
-      else
-        ReportEvery1000 := 100
+      ReportEvery1000 := (TrainingCycle == 1)? 99 : 100
 
     ' If error rate is less than pre-determined threshold then end
     if fError < fSuccess
