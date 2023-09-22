@@ -1,18 +1,21 @@
 { Neural Network
   port of
         http://robotics.hobbizine.com/arduinoann.html
+  Also read
+        https://mattmazur.com/2015/03/17/a-step-by-step-backpropagation-example/
 
-  only drive capability use
-        https://github.com/JonComo/Arduino_weight_trainer
+  Only drive capability to train and generate NN weights
+        https://github.com/timmoore/propbot/trainer
 }
 
 CON
+' need to match training data and generated weights
 InputNodes      = 5
 HiddenNodes     = 6
 OutputNodes     = 2
 
 OBJ
-    utilities   : "utilities"
+  utilities     : "utilities"
 
 VAR
   long fOutput[OutputNodes]
@@ -21,70 +24,70 @@ VAR
 DAT
 ' training data from Spin2_weight_trainer
 fHiddenWeights
-long -1.103515625
-long  1.7958984375
-long  -0.6025390625
-long  -0.60107421875
-long  -0.11968994140625
-long  0.292724609375
+long -1.205078125
+long  0.54443359375
+long  -1.578125
+long  -1.2666015625
+long  -1.525390625
+long  -0.8115234375
 
-long  1.38671875
-long  -0.70654296875
-long  -0.9033203125
-long  -0.658203125
-long  -0.6201171875
+long  0.3115234375
+long  1.017578125
+long  1.1796875
+long  1.3994140625
+long  0.8623046875
+long  -1.0263671875
+
+long  -2.0
+long  1.142578125
+long  -1.0947265625
+long  -0.8046875
+long  -1.068359375
+long  -1.25
+
+long  -0.494873046875
+long  0.4853515625
+long  0.194580078125
+long  0.50048828125
+long  0.18994140625
+long  -0.68505859375
+
+long  -1.447265625
 long  1.0
+long  -1.046875
+long  -1.1220703125
+long  -1.0
+long  -0.095703125
 
-long  -1.443359375
-long  0.99951171875
-long  -1.1328125
-long  -1.501953125
-long  0.130615234375
-long  1.9443359375
-
-long  0.294189453125
-long  -0.60791015625
-long  -0.966796875
-long  0.413330078125
-long  -0.53564453125
-long  0.72412109375
-
-long  -1.533203125
-long  1.408203125
-long  -0.38818359375
-long  -1.5078125
-long  -0.2301025390625
-long  0.336669921875
-
-long  0.87841796875
-long  -0.7119140625
+long  1.4345703125
+long  -0.8056640625
+long  0.50048828125
+long  -0.0955810546875
+long  0.54833984375
 long  1.0
-long  1.244140625
-long  0.250244140625
-long  -1.3203125
 
 fEndHiddenWeights
 fOutputWeights
-long 2.994140625
-long  0.9716796875
+long 2.42578125
+long  3.037109375
 
-long  -2.984375
-long  -0.83056640625
+long  -1.8486328125
+long  -2.703125
 
-long  1.306640625
-long  2.26171875
+long  2.248046875
+long  0.83154296875
 
-long  1.9208984375
-long  2.44921875
+long  2.0
+long  -0.455322265625
 
-long  -0.418701171875
-long  1.0
+long  2.0
+long  0.8115234375
 
-long  -1.3291015625
-long  -2.884765625
+long  0.72119140625
+long  2.38671875
 
-long  0.30908203125
-long  -0.736328125
+long  -2.216796875
+long  -1.029296875
 
 fEndOutputWeights
 
