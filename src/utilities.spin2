@@ -140,7 +140,7 @@ CON
 '
 pub sigmoid(fin) : result | fsum, fterm, fi, i
 ' output range 0 to +1
-  fin := 0.0 -. fin
+  fin := -.fin
   if frel(fin, fposlimit, FGT)                          ' >. handle upper limit
     result := 1.0
   elseif frel(fin, fneglimit, FLT)                      ' <. handle lower limit
