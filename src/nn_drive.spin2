@@ -172,11 +172,11 @@ testinputs
         long  true,  true,  true,  true, false          ' test8
 endtestinputs
 
-pub test_nn() | btest[5], nout[2], i
+pub test_nn() | ptest, nout[2], i
 ' run set of tests on nn
 '
   repeat i from 0 to ((@endtestinputs - @testinputs)/(4*5))-1
-    longmove(@btest, @long[@testinputs][5*i], 5)
-    drive_nn(@btest, @nout)
-    debug("test", udec_(i+1), " lidar=(", zstr_(updatedisplaylidar(@btest)), ") motors= ", sdec_long_array_(@nout, 2))
+    ptest := @long[@testinputs][5*i]
+    drive_nn(ptest, @nout)
+    debug("test", udec_(i+1), " lidar=(", zstr_(updatedisplaylidar(ptest)), ") motors= ", sdec_long_array_(@nout, 2))
 '
