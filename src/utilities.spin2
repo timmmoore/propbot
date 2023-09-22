@@ -132,11 +132,15 @@ pub cart_pol(x, y) : r, t
   end
 '
 CON
-  fposlimit        = 7.0
-  fneglimit        = -7.0
+  fposlimit        = 4.5
+  fneglimit        = -4.5
 
+'def sigmoid(x):
+'    return 1.0/(1.0 + exp(-x))
+'
 pub sigmoid(fin) : result | fsum, fterm, fi, i
-' output range -1 to +1
+' output range 0 to +1
+  fin := 0.0 -. fin
   if frel(fin, fposlimit, FGT)                          ' >. handle upper limit
     result := 1.0
   elseif frel(fin, fneglimit, FLT)                      ' <. handle lower limit
