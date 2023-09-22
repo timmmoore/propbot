@@ -90,6 +90,8 @@ CON { fixed io pins }
   YAW                           = 2
   PRESSURE                      = 3
 
+  TESTTRAINING                  = true
+
 OBJ { our Drive Subsystem }
 
                                                         ' 1 cog, total -> 7 cogs
@@ -148,9 +150,10 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
           debug(" Neural Network sizs mis-match")
 
         ' run the tests for the nn
-        nn.test_nn()
-        repeat
-          waitms(1000)
+        if TESTTRAINING
+          nn.test_nn()
+          repeat
+            waitms(1000)
 
         remoteCog := remoteCtl.starttx(SBUS_RX, @Defaults, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
