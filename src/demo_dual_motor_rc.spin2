@@ -99,6 +99,7 @@ OBJ { our Drive Subsystem }
     lidar       : "rplidar"                             ' rplidar A1M8, 1 cog
     imu         : "usfsmax"                             ' imu
     nn          : "nn_drive"                            ' neural network auto drive
+    training    : "nn_training"                         ' neural network auto drive
 
 VAR
     long    remoteCog, telemetryCog, lidarCog
@@ -144,6 +145,10 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
 
         if nn.start() <> 0
           debug(" Neural Network sizes do not match")
+
+        'nn.test_nn()
+        'repeat
+        '  waitms(1000)
 
         remoteCog := remoteCtl.starttx(SBUS_RX, @Defaults, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
@@ -401,7 +406,7 @@ CON
   AUTODRIVE     = 10                                                            ' drive speed
   AUTOTURN      = 100                                                           ' turning speed
   ' nn information
-  NNAUTONOMOUS  = false 'true                                                          ' true if use NN
+  NNAUTONOMOUS  = true                                                          ' true if use NN
   NNSPEEDRATIO  = 1                                                             ' ratio to slowdown bot
 
 VAR
