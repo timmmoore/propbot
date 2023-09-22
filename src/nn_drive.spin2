@@ -94,7 +94,8 @@ fEndOutputWeights
 pub null()
 
 pub start() : result
-
+' 0 is ok
+  ' size of weight table must match expected based on node sizes
   if (@fEndHiddenWeights-@fHiddenWeights)/4 <> (InputNodes+1)*HiddenNodes
     debug(" Hidden weight size mis-match ", udec((fEndHiddenWeights-fHiddenWeights)/4), " ", udec((InputNodes+1)*HiddenNodes))
     return 1
@@ -106,53 +107,17 @@ pub start() : result
 VAR
   long fTestInput[InputNodes]
 
-VAR
-  byte disp[6]
-
-DAT
-lidardisp   byte "L#F#R", 0
-
-PRI updatedisplaylidar(pin) : result | i
-' convert lidar detection into displayable string
-  strcopy(@disp, @lidardisp, 5)
-  repeat i from 0 to 4
-    ifnot long[pin][i]
-      disp[i] := " "
-  return @disp
-
-pub test_nn() | btest[5], nout[2]
-
-  btest[0] := btest[1] := btest[2] := btest[3] := btest[4] := false
-  drive_nn(@btest, @nout)
-  debug("test1 ", zstr(updatedisplaylidar(@btest)), " ", sdec_long_array(@nout, 2))
-
-  btest[0] := btest[1] := btest[2] := btest[3] := btest[4] := true
-  drive_nn(@btest, @nout)
-  debug("test2 ", zstr(updatedisplaylidar(@btest)), " ", sdec_long_array(@nout, 2))
-
-  btest[0] := btest[1] := false
-  btest[2] := true
-  btest[3] := btest[4] := false
-  drive_nn(@btest, @nout)
-  debug("test3 ", zstr(updatedisplaylidar(@btest)), " ", sdec_long_array(@nout, 2))
-
-  btest[0] := false
-  btest[1] := btest[2] := btest[3] := true
-  btest[4] := false
-  drive_nn(@btest, @nout)
-  debug("test4 ", zstr(updatedisplaylidar(@btest)), " ", sdec_long_array(@nout, 2))
-
 pub drive_nn(pInput, pOutput) | index, pout
 ' input: boolean, lidar detection (L, FL, F, FR, R)
 ' output: -100 to 100, left/right motor speed
 
   repeat index from 0 to InputNodes-1
-    fTestInput[index] := long[pInput][index]? 1.0 : 0.0                         ' convert boolean to float 0.0, 1.0
+    fTestInput[index] := long[pInput][index]? 1.0 : 0.0                         ' convert boolean inputs to float 0.0, 1.0
 
   pout := InputToOutput(@fTestInput)                                            ' input to NN to obtain output
 
   repeat index from 0 to OutputNodes-1
-    long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert 0 <=> +1 to -100 to 100
+    long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert 0 -> +1 to -100 to 100
   'debug(" out1 ", sdec_long_array(pOutput, OutputNodes))
 
 pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum
@@ -180,4 +145,38 @@ pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, 
     fOutput[outer] := utilities.sigmoid(faccum)
 
   return @fOutput
+'
+VAR
+  byte disp[6]
+
+DAT
+lidardisp   byte "L#F#R", 0
+
+PUB updatedisplaylidar(pin) : result | i
+' convert lidar detection into displayable string
+  strcopy(@disp, @lidardisp, 5)
+  repeat i from 0 to 4
+    ifnot long[pin][i]
+      disp[i] := " "
+  return @disp
+
+DAT
+testinputs
+        long false, false, false, false, false          ' test1
+        long  true,  true,  true,  true,  true          ' test2
+        long false, false,  true, false, false          ' test3
+        long false,  true,  true,  true, false          ' test4
+        long  true,  false, true, false,  true          ' test5
+        long  true,  true,  true, false, false          ' test6
+        long false, false,  true,  true,  true          ' test7
+        long  true,  true,  true,  true, false          ' test8
+endtestinputs
+
+pub test_nn() | btest[5], nout[2], i
+' run set of tests on nn
+'
+  repeat i from 0 to ((@endtestinputs - @testinputs)/(4*5))-1
+    longmove(@btest, @long[@testinputs][5*i], 5)
+    drive_nn(@btest, @nout)
+    debug("test", udec_(i+1), " lidar=(", zstr_(updatedisplaylidar(@btest)), ") motors= ", sdec_long_array_(@nout, 2))
 '
