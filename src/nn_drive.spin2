@@ -19,61 +19,73 @@ VAR
   long fHidden[HiddenNodes]
 
 DAT
-' training data from Arduino_weight_trainer
-' WARNING: sizes below and input/hidden/output nodes sizes must match
+' training data from Spin2_weight_trainer
 fHiddenWeights
-long  0.21134984493255615      ' 0
-long  -0.006911986507475376
-long  0.11779005080461502      ' 2
-long  -0.39168646931648254
-long  0.6752384305000305       ' 4
-long  -0.5866423845291138
-long  -0.2975810766220093      ' 6
-long  -0.5601735711097717
-long  0.5492990612983704       ' 8
-long  -0.2682107388973236
-long  -0.3833119571208954      ' 10
-long  -0.7302111387252808
-long  0.08133271336555481      ' 12
-long  -0.04117460548877716
-long  0.32272472977638245      ' 14
-long  0.3761758804321289
-long  -0.4141826331615448      ' 16
-long  0.11719145625829697
-long  -0.13441094756126404     ' 18
-long  -0.20437516272068024
-long  -0.07803918421268463     ' 20
-long  -0.4805698096752167
-long  -0.23574508726596832     ' 22
-long  0.007259433623403311
-long  0.2256428301334381       ' 24
-long  0.2824275493621826
-long  0.39907294511795044      ' 26
-long  0.333750456571579
-long  0.4863360822200775       ' 28
-long  -0.18421441316604614
-long  0.016523784026503563     ' 30
-long  -0.007929526269435883
-long  -0.007134068291634321    ' 32
-long  0.009907398372888565
-long  0.005352230276912451     ' 34
-long  -0.006631459109485149
+long -1.103515625
+long  1.7958984375
+long  -0.6025390625
+long  -0.60107421875
+long  -0.11968994140625
+long  0.292724609375
+
+long  1.38671875
+long  -0.70654296875
+long  -0.9033203125
+long  -0.658203125
+long  -0.6201171875
+long  1.0
+
+long  -1.443359375
+long  0.99951171875
+long  -1.1328125
+long  -1.501953125
+long  0.130615234375
+long  1.9443359375
+
+long  0.294189453125
+long  -0.60791015625
+long  -0.966796875
+long  0.413330078125
+long  -0.53564453125
+long  0.72412109375
+
+long  -1.533203125
+long  1.408203125
+long  -0.38818359375
+long  -1.5078125
+long  -0.2301025390625
+long  0.336669921875
+
+long  0.87841796875
+long  -0.7119140625
+long  1.0
+long  1.244140625
+long  0.250244140625
+long  -1.3203125
+
 fEndHiddenWeights
 fOutputWeights
-long  0.5352723598480225        ' 0
-long  -0.8408554196357727
-long  0.44115740060806274       ' 2
-long  0.6798343658447266
-long  -0.4171541631221771       ' 4
-long  0.7644716501235962
-long  0.3567945659160614        ' 6
-long  -0.49026328325271606
-long  -0.6983018517494202       ' 8
-long  -0.5626979470252991
-long  0.04548772796988487       ' 10
-long  0.7724423408508301
-long  0.018218133598566055      ' 12
-long  -0.07003289461135864
+long 2.994140625
+long  0.9716796875
+
+long  -2.984375
+long  -0.83056640625
+
+long  1.306640625
+long  2.26171875
+
+long  1.9208984375
+long  2.44921875
+
+long  -0.418701171875
+long  1.0
+
+long  -1.3291015625
+long  -2.884765625
+
+long  0.30908203125
+long  -0.736328125
+
 fEndOutputWeights
 
 pub null()
@@ -91,39 +103,78 @@ pub start() : result
 VAR
   long fTestInput[InputNodes]
 
+VAR
+  byte disp[6]
+
+DAT
+lidardisp   byte "L#F#R", 0
+
+PRI updatedisplaylidar(pin) : result | i
+' convert lidar detection into displayable string
+  strcopy(@disp, @lidardisp, 5)
+  repeat i from 0 to 4
+    ifnot long[pin][i]
+      disp[i] := " "
+  return @disp
+
+pub test_nn() | btest[5], nout[2]
+
+  btest[0] := btest[1] := btest[2] := btest[3] := btest[4] := false
+  drive_nn(@btest, @nout)
+  debug("test1 ", zstr(updatedisplaylidar(@btest)), " ", sdec_long_array(@nout, 2))
+
+  btest[0] := btest[1] := btest[2] := btest[3] := btest[4] := true
+  drive_nn(@btest, @nout)
+  debug("test2 ", zstr(updatedisplaylidar(@btest)), " ", sdec_long_array(@nout, 2))
+
+  btest[0] := btest[1] := false
+  btest[2] := true
+  btest[3] := btest[4] := false
+  drive_nn(@btest, @nout)
+  debug("test3 ", zstr(updatedisplaylidar(@btest)), " ", sdec_long_array(@nout, 2))
+
+  btest[0] := false
+  btest[1] := btest[2] := btest[3] := true
+  btest[4] := false
+  drive_nn(@btest, @nout)
+  debug("test4 ", zstr(updatedisplaylidar(@btest)), " ", sdec_long_array(@nout, 2))
+
 pub drive_nn(pInput, pOutput) | index, pout
 ' input: boolean, lidar detection (L, FL, F, FR, R)
 ' output: -100 to 100, left/right motor speed
 
   repeat index from 0 to InputNodes-1
-    fTestInput[index] := long[pInput][index]? 1.0 : 0.0                         ' convert boolean to float 0.0-1.0
+    fTestInput[index] := long[pInput][index]? 1.0 : 0.0                         ' convert boolean to float 0.0, 1.0
 
   pout := InputToOutput(@fTestInput)                                            ' input to NN to obtain output
 
   repeat index from 0 to OutputNodes-1
-    long[pOutput][index] := round(long[pout][index] *. 100.0)                   ' convert -1 <=> +1 to -100 to 100
+    long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert 0 <=> +1 to -100 to 100
+  'debug(" out1 ", sdec_long_array(pOutput, OutputNodes))
 
 pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum
 
   ' Compute hidden layer activations
+  ' float HiddenWeights[InputNodes + 1][HiddenNodes]
   tempindex := InputNodes*HiddenNodes
   repeat outer from 0 to HiddenNodes-1
-    faccum := fHiddenWeights[tempindex++]
+    faccum := long[@fHiddenWeights][tempindex++]
     tempindex1 := outer
     repeat inner from 0 to InputNodes-1
-      faccum := faccum +. (long[pfTestInput][inner] *. fHiddenWeights[tempindex1])
-      tempindex1 += InputNodes
-    fHidden[outer] := utilities.sigmoid(fAccum)
+      faccum := faccum +. (long[pfTestInput][inner] *. long[@fHiddenWeights][tempindex1])
+      tempindex1 += HiddenNodes
+    fHidden[outer] := utilities.sigmoid(faccum)
 
   ' Compute output layer activations and calculate errors
-  tempindex := OutputNodes*HiddenNodes
+  ' float OutputWeights[HiddenNodes + 1][OutputNodes];
+  tempindex := HiddenNodes*OutputNodes
   repeat outer from 0 to OutputNodes-1
-    faccum := fOutputWeights[tempindex++]
+    faccum := long[@fOutputWeights][tempindex++]
     tempindex1 := outer
     repeat inner from 0 to HiddenNodes-1
-      faccum := fAccum +. (fHidden[inner] *. fOutputWeights[tempindex1])
+      faccum := fAccum +. (fHidden[inner] *. long[@fOutputWeights][tempindex1])
       tempindex1 += OutputNodes
-    fOutput[outer] := utilities.sigmoid(fAccum)
+    fOutput[outer] := utilities.sigmoid(faccum)
 
   return @fOutput
 '
