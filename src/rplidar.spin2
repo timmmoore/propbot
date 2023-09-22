@@ -85,25 +85,31 @@ CON
   RESULT_OPERATION_TIMEOUT      = ($8002 | RESULT_FAIL_BIT)
   RPLIDAR_DEFAULT_TIMEOUT       = 500
 
+  MAXROTATIONS                  = 5                                             'measurements older than this are ignored
+
 VAR
-  long txpin, rxpin, motorpin
+  long txpin, rxpin, motorpin                                                   ' start configuration
   long Cog, notstopped
+
+                                                                                ' buffers to send/receive various messages
   byte cmd_packet[MAX_CMD_PACKET_SIZE]
   byte ans_header[MAX_ANS_HEADER_SIZE]
   byte response_measurement[RESPONSE_MEASUREMENT_SIZE]
   byte response_device[RESPONSE_DEVICE_SIZE]
   byte response_health[RESPONSE_HEALTH_SIZE]
+
+                                                                                ' last measurement received
   long RPLidarMeasurementDistance
   long RPLidarMeasurementAngle
   long RPLidarMeasurementQuality
   long RPLidarMeasurementStartBit
 
-  ' 0 is in front, rotates  anti-clockwise to 359 degrees
+  ' 0 is in front, rotates  clockwise to 359 degrees
   ' front of lidar is opposite end from motor
   ' max distance is 12_000 mm
   word distance[360]                                                            ' contains distance in mm for angle 0-360
-  word disrotation[360]
-  word rotations
+  word disrotation[360]                                                         ' how many rotations since the measurement was received
+  word rotations                                                                ' count rotations since started
 
   long taskStack[STACK_SIZE_LONGS]
 
@@ -143,7 +149,7 @@ PUB checkdistance(angle, deltaangle, distance_) : ok | index, current
   current := getms()
   'debug("checkdistance ", sdec(angle), " ", sdec(deltaangle), " ", sdec(distance_))
   repeat index from angle-deltaangle to angle+deltaangle
-    if disrotation[(index+360)//360] + 5 +< rotations                           ' more than 5 rotations old
+    if disrotation[(index+360)//360] + MAXROTATIONS +< rotations                ' more than max allowed rotations old
       next
     if distance[(index+360)//360] +< distance_                                  ' in case -ve and/or over 360
       'debug("checkdistance ", sdec(index), " ", sdec_((index+360)//360), " ", sdec_(distance[(index+360)//360]), " ", sdec(distance_))
@@ -157,7 +163,7 @@ PRI motoroff()
 
 PRI write(pbytes, nobytes) | index
 ' write nobytes to lidar
-  repeat index from 0 to nobytes-1
+  repeat index from 0 to nobytes-1                                              ' repeat for each byte in buffer
     wypin(txpin, byte[pbytes][index])                                           ' send byte
     repeat                                                                      ' wait until flushed
     while pinr(txpin) == 0
@@ -171,9 +177,9 @@ PRI read() : rxbyte
 PRI _sendCommand(cmd, ppayload, payloadsize) : ok | byte checksum, byte sizebyte, pos
 ' send command to lidar
   if payloadsize <> 0 and ppayload <> 0
-    cmd |= RPLIDAR_CMDFLAG_HAS_PAYLOAD
+    cmd |= RPLIDAR_CMDFLAG_HAS_PAYLOAD                                          ' if have payload set the right bit in the command
 
-  cmd_packet[CMD_PACKET_SYNCBYTE] := RPLIDAR_CMD_SYNC_BYTE
+  cmd_packet[CMD_PACKET_SYNCBYTE] := RPLIDAR_CMD_SYNC_BYTE                      ' sync byte and command
   cmd_packet[CMD_PACKET_CMDFLAG] := cmd
 
   write(@cmd_packet, 2)                                                         ' send header first
@@ -223,7 +229,7 @@ PRI getDeviceInfo(pinfobuf, timeout) : ans | recvPos, currentTs, currentbyte
   if (ans := _waitResponseHeader(@ans_header, timeout)) & RESULT_FAIL_BIT       ' wait for response
     return ans
 
-  ' verify whether we got a correct header
+                                                                                ' verify whether we got a correct header
   if ans_header[ANS_TYPE] <> RPLIDAR_ANS_TYPE_DEVINFO                           ' if it is what we are expecting
     return RESULT_INVALID_DATA
 
@@ -248,17 +254,15 @@ PRI stopScan() : ans
 
 PRI startScan(force, timeout) : ans
 ' start the measurement operation
-  stopScan() ' force the previous operation to stop
+  stopScan()                                                                    ' force the previous operation to stop
 
   if (ans := _sendCommand(force?RPLIDAR_CMD_FORCE_SCAN:RPLIDAR_CMD_SCAN, 0, 0)) & RESULT_FAIL_BIT
     return ans
 
-  ' waiting for confirmation
-  if (ans := _waitResponseHeader(@ans_header, timeout)) & RESULT_FAIL_BIT
+  if (ans := _waitResponseHeader(@ans_header, timeout)) & RESULT_FAIL_BIT       ' waiting for confirmation
     return ans
 
-  ' verify whether we got a correct header
-  if ans_header[ANS_TYPE] <> RPLIDAR_ANS_TYPE_MEASUREMENT
+  if ans_header[ANS_TYPE] <> RPLIDAR_ANS_TYPE_MEASUREMENT                       ' verify whether we got a correct header
     return RESULT_INVALID_DATA
 
   if ans_header[ANS_SIZE] < RESPONSE_MEASUREMENT_SIZE
@@ -270,18 +274,17 @@ PRI waitPoint(timeout) : ok | recvPos, currentbyte, currentTs
   currentTs := getms() + timeout
 
   repeat while getms() +< currentTs
-    if (currentbyte := read()) == -1
+    if (currentbyte := read()) == -1                                            ' either get a valid measurement or timeout
       next
 
-    if recvPos == 0 and not (((currentbyte >> 1) ^ currentbyte) & $01)
+    if recvPos == 0 and not (((currentbyte >> 1) ^ currentbyte) & $01)          ' correct 1st byte?
       next
-    if recvPos == 1 and not (currentbyte & RPLIDAR_RESP_MEAS_CHECKBIT)
+    if recvPos == 1 and not (currentbyte & RPLIDAR_RESP_MEAS_CHECKBIT)          ' correct 2nd byte?
       recvPos := 0
       next
-    response_measurement[recvPos++] := currentbyte
+    response_measurement[recvPos++] := currentbyte                              ' save incoming until we get right size packet
 
-    if recvPos == RESPONSE_MEASUREMENT_SIZE
-      ' store the data ...
+    if recvPos == RESPONSE_MEASUREMENT_SIZE                                     ' got a measurement, so store the data
       RPLidarMeasurementDistance := (response_measurement[RESPONSE_MEASUREMENT_DISTANCE] | (response_measurement[RESPONSE_MEASUREMENT_DISTANCE+1]<<8)) >> 2
       RPLidarMeasurementAngle := (response_measurement[RESPONSE_MEASUREMENT_CHECKBIT] | (response_measurement[RESPONSE_MEASUREMENT_CHECKBIT+1]<<8)) >> 7
       RPLidarMeasurementQuality := response_measurement[RESPONSE_MEASUREMENT_QUALITY] >> RPLIDAR_RESP_MEAS_QUAL_SHIFT
@@ -293,7 +296,7 @@ PRI waitPoint(timeout) : ok | recvPos, currentbyte, currentTs
 PUB getCurrentPoint() : cdistance, cangle, startBit, quality
 ' get last measurement
   cdistance := RPLidarMeasurementDistance                                       ' distance value in mm unit
-  cangle := 0 #> RPLidarMeasurementAngle <# 359                                 ' angle value in degree and in range
+  cangle := 0 #> RPLidarMeasurementAngle <# 359                                 ' angle value in degree and make sure in range
   cangle := (360 - cangle)//360                                                 ' correct for polar scope_xy - invert
   startBit := RPLidarMeasurementStartBit                                        ' whether this point is belong to a new scan
   quality := RPLidarMeasurementQuality                                          ' quality of the current measurement
@@ -301,21 +304,22 @@ PUB getCurrentPoint() : cdistance, cangle, startBit, quality
 PRI lidarInfo() | ldistance, langle, startBit, quality, display
 ' find and start lidar scanning
 ' get distances and update in distance/angle array
+
   'debug(`scope_xy s samples 512 range 5_000 polar 360 'D')
   repeat while notstopped
-    ifnot waitPoint(RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT
+    ifnot waitPoint(RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT                  ' get a measurement
       ldistance, langle, startBit, quality := getCurrentPoint()
-      if startBit
-        rotations++
+      if startBit                                                               ' first measurement of a new rotation
+        rotations++                                                             ' count rotations so we can ignore old measurements
       if ldistance <> 0
         distance[langle] := ldistance                                           ' store in distance per angle array
-        disrotation[langle] := rotations
+        disrotation[langle] := rotations                                        ' and rotation number of measurement
       'ifnot (display := (display + 1) & $1f)                                   ' every 32 so can keep up but not factor of 360
       '  debug(`s `(ldistance, langle))
     else
-      motoroff()
-      ' try to detect RPLIDAR...
-      ifnot getDeviceInfo(@response_device, RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT
+      motoroff()                                                                ' need to turn off motor to detect
+      ' detect RPLIDAR
+      ifnot getDeviceInfo(@response_device, RPLIDAR_DEFAULT_TIMEOUT) & RESULT_FAIL_BIT ' succeeded
         startScan(false, RPLIDAR_DEFAULT_TIMEOUT)                               ' detected, so start scanning
         motoron()                                                               ' and turn motor on
         waitms(1000)                                                            ' dont reduce this, continous error if not ready
