@@ -405,7 +405,7 @@ CON
   LEFT2ANGLE    = 90                                                            ' angle to left
   RIGHT1ANGLE   = 315                                                           ' angle to right
   RIGHT2ANGLE   = 270                                                           ' angle to right
-  DELTAANGLE    = 13                                                            ' +- angle when checking distance
+  DELTAANGLE    = 23                                                            ' +- angle when checking distance
   MINDISTANCE   = 500                                                           ' min distance in mm
 
   NNSPEEDRATIO  = 2                                                             ' ratio to slowdown bot
