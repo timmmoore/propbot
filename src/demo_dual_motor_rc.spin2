@@ -32,6 +32,8 @@
 ''                              add switch that moves bot 1 rotation forward, testing degree/distance with doco4k motors
 ''   Updated.... 17 Sept 2023 (timmoore)
 ''                              add support for RPLidar A1M8 and IMU
+''   Updated.... 20 Sept 2023 (timmoore)
+''                              add support for autonomous roaming using neural network
 ''
 '' =================================================================================================
 
@@ -146,9 +148,9 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
           debug(" Neural Network sizs mis-match")
 
         ' run the tests for the nn
-        'nn.test_nn()
-        'repeat
-        '  waitms(1000)
+        nn.test_nn()
+        repeat
+          waitms(1000)
 
         remoteCog := remoteCtl.starttx(SBUS_RX, @Defaults, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
         telemetryCog := telemetry.start(SPORT_BI)
