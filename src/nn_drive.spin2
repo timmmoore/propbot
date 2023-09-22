@@ -131,8 +131,9 @@ pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, 
 '
 ' cordic operations (1 multiply)*(inputnodes + outputnodes)*hiddennodes
 '                   hiddennodes+outputnode * sigmoid 9 * (1 multiply, 1 divide) + 1 divide
-'                   hiddennodes+outputnode * sigmoid 4 multiply, 2 divide
+'                   hiddennodes+outputnode * approx sigmoid 4 multiply, 2 divide
 ' total = 114 multiply, 80 divide, ~130us, so 22% of excution time
+' total approx = 72 multiply, 16 divide, ~59us, so 17% of excution time
 '
   ' Compute hidden layer activations
   ' float HiddenWeights[InputNodes + 1][HiddenNodes]                            ' weight per input node per hidden node

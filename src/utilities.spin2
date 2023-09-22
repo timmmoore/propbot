@@ -171,6 +171,7 @@ pub sigmoid(fin) : result | fterm, fterm1, fterm2, fterm3
   elseif frel(fin, fneglimit, FLT)                      ' <. handle lower limit
     result := 0.0
   else
+    ' n = 16, so (1-fin/16)^16
     fin := 1.0 +. fin /. 16.0
     fterm := fin *. fin
     fterm1 := fterm *. fterm
