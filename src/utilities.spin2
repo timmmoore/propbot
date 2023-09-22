@@ -135,24 +135,49 @@ CON
   fposlimit        = 4.5
   fneglimit        = -4.5
 
-'def sigmoid(x):
-'    return 1.0/(1.0 + exp(-x))
+' equilivalent
+'   return 1.0/(1.0 + exp(-x))
 '
-pub sigmoid(fin) : result | fsum, fterm, fi, i
+pub sigmoid1(fin) : result | fsum, fterm, fterm1, fterm2, fterm3, fterm4, fterm5, fterm6, fterm7, fterm8
 ' output range 0 to +1
   fin := -.fin
+                                                        ' make sure in range for the tayor series to converge
   if frel(fin, fposlimit, FGT)                          ' >. handle upper limit
     result := 1.0
   elseif frel(fin, fneglimit, FLT)                      ' <. handle lower limit
     result := 0.0
   else
-    fi := fsum := fterm := 1.0
-    repeat 10                                           ' tayor series
-      fterm := fterm *. (fin /. fi)
-      fi := fi +. 1.0
-      fsum := fsum +. fterm
-    result := 1.0 /. (1.0 +. fsum)
+    fterm  := fin *. (fin /. 2.0)                       ' tayor series for exp
+    fterm1 := fterm *. (fin /. 3.0)
+    fterm2 := fterm1 *. (fin /. 4.0)
+    fterm3 := fterm2 *. (fin /. 5.0)
+    fterm4 := fterm3 *. (fin /. 6.0)
+    fterm5 := fterm4 *. (fin /. 7.0)
+    fterm6 := fterm5 *. (fin /. 8.0)
+    fterm7 := fterm6 *. (fin /. 9.0)
+    fterm8 := fterm7 *. (fin /. 10.0)
+    fsum := fin +. fterm +. fterm1 +. fterm2 +. fterm3 +. fterm4 +. fterm5 +. fterm6 +. fterm7 +. fterm8
+    result := 1.0 /. (2.0 +. fsum)
 
+' approx log_w_approx_exp_no_overflow16_clamped
+' see https://scicomp.stackexchange.com/questions/42186/faster-logistic-function
+'
+pub sigmoid(fin) : result | fterm, fterm1, fterm2, fterm3
+' output range 0 to +1
+  fin := -.fin
+                                                        ' make sure in range for the tayor series to converge
+  if frel(fin, fposlimit, FGT)                          ' >. handle upper limit
+    result := 1.0
+  elseif frel(fin, fneglimit, FLT)                      ' <. handle lower limit
+    result := 0.0
+  else
+    fin := 1.0 +. fin /. 16.0
+    fterm := fin *. fin
+    fterm1 := fterm *. fterm
+    fterm2 := fterm1 *. fterm1
+    fterm3 := fterm2 *. fterm2
+    result := 1.0 /. (1.0 +. fterm3)
+'
 con { license }
 
 {{
