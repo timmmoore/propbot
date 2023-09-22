@@ -146,6 +146,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
         if nn.start() <> 0
           debug(" Neural Network sizes do not match")
 
+        ' run the tests for the nn
         'nn.test_nn()
         'repeat
         '  waitms(1000)
