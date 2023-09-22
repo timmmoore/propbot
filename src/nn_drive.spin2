@@ -10,19 +10,25 @@
 
 CON
 ' need to match training data and generated weights
-InputNodes      = 5
-HiddenNodes     = 6
-OutputNodes     = 2
+InputNodes      = 5                                                             ' input nodes,1 per lidar input
+HiddenNodes     = 6                                                             ' hidden nodes
+OutputNodes     = 2                                                             ' output nodes, 1 per motor
 
 OBJ
   utilities     : "utilities"
 
 VAR
-  long fOutput[OutputNodes]
-  long fHidden[HiddenNodes]
+  long fInput[InputNodes]                                                       ' input values
+  long fHidden[HiddenNodes]                                                     ' hidden values
+  long fOutput[OutputNodes]                                                     ' output values
 
 DAT
 ' training data from Spin2_weight_trainer
+' run the training data using the Spin2_weight_trainer. Copy and paste the results here
+'
+' The first are weights for the hidden nodes:  (InputNodes+1)  * HiddenNodes
+' The second are weights for the output nodes: (HiddenNodes+1) * OutputNodes
+'
 fHiddenWeights
 long -1.205078125
 long  0.54443359375
@@ -65,8 +71,8 @@ long  0.50048828125
 long  -0.0955810546875
 long  0.54833984375
 long  1.0
-
 fEndHiddenWeights
+
 fOutputWeights
 long 2.42578125
 long  3.037109375
@@ -88,7 +94,6 @@ long  2.38671875
 
 long  -2.216796875
 long  -1.029296875
-
 fEndOutputWeights
 
 pub null()
@@ -104,45 +109,52 @@ pub start() : result
     return 2
   return 0
 
-VAR
-  long fTestInput[InputNodes]
-
 pub drive_nn(pInput, pOutput) | index, pout
-' input: boolean, lidar detection (L, FL, F, FR, R)
-' output: -100 to 100, left/right motor speed
-
+' translate between demo_dual_motor_rc input/output
+'   input: boolean, lidar detection (L, FL, F, FR, R)
+'   output: -100 to 100, left/right motor speed
+' 583us / 355us with approx sigmoid
   repeat index from 0 to InputNodes-1
-    fTestInput[index] := long[pInput][index]? 1.0 : 0.0                         ' convert boolean inputs to float 0.0, 1.0
+    fInput[index] := long[pInput][index]? 1.0 : 0.0                             ' convert boolean inputs to float 0.0, 1.0
 
-  pout := InputToOutput(@fTestInput)                                            ' input to NN to obtain output
+  pout := InputToOutput(@fInput)                                                ' input to NN to obtain output
 
   repeat index from 0 to OutputNodes-1
     long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert 0 -> +1 to -100 to 100
   'debug(" out1 ", sdec_long_array(pOutput, OutputNodes))
 
 pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum
-
+' core of the neutral network
+' input nodes are  5: 0.0/1.0 assumption is true if something left/front-left, front, front-right, right
+' output nodes are 2: 0.0-1.0 left/right motor 0 is full speed backwards, 0.5 is stopped, 1.0 is full speed forwards
+' hidden nodes are 6
+'
+' cordic operations (1 multiply)*(inputnodes + outputnodes)*hiddennodes
+'                   hiddennodes+outputnode * sigmoid 9 * (1 multiply, 1 divide) + 1 divide
+'                   hiddennodes+outputnode * sigmoid 4 multiply, 2 divide
+' total = 114 multiply, 80 divide, ~130us, so 22% of excution time
+'
   ' Compute hidden layer activations
-  ' float HiddenWeights[InputNodes + 1][HiddenNodes]
-  tempindex := InputNodes*HiddenNodes
+  ' float HiddenWeights[InputNodes + 1][HiddenNodes]                            ' weight per input node per hidden node
+  tempindex := InputNodes*HiddenNodes                                           ' bias is handled as an extra input node
   repeat outer from 0 to HiddenNodes-1
-    faccum := long[@fHiddenWeights][tempindex++]
+    faccum := long[@fHiddenWeights][tempindex++]                                ' bias to start adding up weights
     tempindex1 := outer
     repeat inner from 0 to InputNodes-1
-      faccum := faccum +. (long[pfTestInput][inner] *. long[@fHiddenWeights][tempindex1])
-      tempindex1 += HiddenNodes
-    fHidden[outer] := utilities.sigmoid(faccum)
+      faccum := faccum +. (long[pfTestInput][inner] *. long[@fHiddenWeights][tempindex1]) ' sum of weights per hidden node per input node
+      tempindex1 += HiddenNodes                                                 ' next hidden node
+    fHidden[outer] := utilities.sigmoid(faccum)                                 ' total per hidden node, curve flattened using logistic function
 
-  ' Compute output layer activations and calculate errors
-  ' float OutputWeights[HiddenNodes + 1][OutputNodes];
-  tempindex := HiddenNodes*OutputNodes
+  ' Compute output layer activations
+  ' float OutputWeights[HiddenNodes + 1][OutputNodes];                          ' weight per hidden node per output node
+  tempindex := HiddenNodes*OutputNodes                                          ' bias is handled as an extra hidden node
   repeat outer from 0 to OutputNodes-1
-    faccum := long[@fOutputWeights][tempindex++]
+    faccum := long[@fOutputWeights][tempindex++]                                ' bias
     tempindex1 := outer
     repeat inner from 0 to HiddenNodes-1
-      faccum := fAccum +. (fHidden[inner] *. long[@fOutputWeights][tempindex1])
+      faccum := fAccum +. (fHidden[inner] *. long[@fOutputWeights][tempindex1]) ' sum of weights per output node per hidden node
       tempindex1 += OutputNodes
-    fOutput[outer] := utilities.sigmoid(faccum)
+    fOutput[outer] := utilities.sigmoid(faccum)                                 ' total per output node, curve flattened using logistic function
 
   return @fOutput
 '
@@ -160,6 +172,8 @@ PUB updatedisplaylidar(pin) : result | i
       disp[i] := " "
   return @disp
 
+' set of tests that run the Lidar simultated inputs through the neutral network and prints the results
+'
 DAT
 testinputs
         long false, false, false, false, false          ' test1
@@ -172,11 +186,14 @@ testinputs
         long  true,  true,  true,  true, false          ' test8
 endtestinputs
 
-pub test_nn() | ptest, nout[2], i
+pub test_nn() | ptest, nout[2], i, t, clk
 ' run set of tests on nn
 '
+  clk := clkfreq/1_000_000
   repeat i from 0 to ((@endtestinputs - @testinputs)/(4*5))-1
     ptest := @long[@testinputs][5*i]
+    t := getct()
     drive_nn(ptest, @nout)
-    debug("test", udec_(i+1), " lidar=(", zstr_(updatedisplaylidar(ptest)), ") motors= ", sdec_long_array_(@nout, 2))
+    t := getct() - t
+    debug("test", udec_(i+1), " ", udec_(t/clk), "us lidar=(", zstr_(updatedisplaylidar(ptest)), ") motors= ", sdec_long_array_(@nout, 2))
 '
