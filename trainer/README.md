@@ -1,7 +1,12 @@
 # Spin2 Weight Trainer
-# Copied and modified from https://github.com/JonComo/Arduino_weight_trainer
+
+Copied and modified from https://github.com/JonComo/Arduino_weight_trainer
 
 Made for this project https://github.com/timmoore/propbot
+
+I use Visual Studio Code to run it with Jupyter extension
+
+Increased number of epochs, decrease precision of weights generated
 
 You'll need the following packages (you can pip install each of them)
 
