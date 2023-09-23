@@ -18,7 +18,6 @@ OBJ
   utilities     : "utilities"
 
 VAR
-  long fInput[InputNodes]                                                       ' input values
   long fHidden[HiddenNodes]                                                     ' hidden values
   long fOutput[OutputNodes]                                                     ' output values
 
@@ -30,69 +29,70 @@ DAT
 ' The second are weights for the output nodes: (HiddenNodes+1) * OutputNodes
 '
 fHiddenWeights
-long -0.8779296875
-long  1.34375
-long  -1.576171875
-long  -1.3125
-long  0.0219268798828125
-long  0.853515625
+long -0.771484375
+long  1.359375
+long  0.45068359375
+long  -1.74609375
+long  -0.356201171875
+long  -1.220703125
 
-long  0.355712890625
-long  -1.0
-long  -0.57080078125
-long  1.0
-long  -1.1728515625
-long  0.84765625
+long  0.169189453125
+long  -0.26416015625
+long  -1.35546875
+long  -1.21484375
+long  0.54443359375
+long  -0.65869140625
 
-long  -1.0
-long  1.1328125
-long  -1.515625
-long  -1.0869140625
-long  -1.423828125
-long  1.14453125
+long  1.189453125
+long  -1.05078125
+long  -0.397216796875
+long  7.68359375
+long  -0.4580078125
+long  0.9111328125
 
-long  -0.30322265625
-long  -1.0
-long  0.82177734375
-long  0.391845703125
-long  -1.0947265625
-long  0.53076171875
-
-long  -0.471923828125
-long  0.9580078125
-long  -0.724609375
-long  -1.875
-long  -0.79248046875
-long  0.62255859375
-
-long  0.311767578125
-long  -0.264892578125
-long  1.0185546875
-long  0.8857421875
-long  1.4091796875
-long  -1.296875
-fEndHiddenWeights
-fOutputWeights
-long 1.3447265625
-long  0.70654296875
-
-long  -2.455078125
-long  -0.10870361328125
-
-long  2.189453125
-long  2.0
-
-long  2.9375
-long  0.7998046875
-
+long  1.0556640625
+long  -0.1793212890625
+long  -1.04296875
+long  -1.57421875
 long  0.99951171875
-long  3.00390625
+long  -0.0469970703125
 
-long  -1.6171875
-long  -2.9765625
+long  -4.0
+long  1.81640625
+long  0.755859375
+long  -1.22265625
+long  -0.415771484375
+long  -0.68701171875
 
-long  -0.59521484375
-long  -0.99951171875
+long  1.3857421875
+long  -1.1259765625
+long  2.0
+long  -1.197265625
+long  -0.0611572265625
+long  1.220703125
+fEndHiddenWeights
+
+fOutputWeights
+long 4.00390625
+long  2.462890625
+
+long  -3.546875
+long  -2.0
+
+long  -1.044921875
+long  2.638671875
+
+long  -5.7890625
+long  -4.63671875
+
+long  0.6484375
+long  -2.0
+
+long  2.06640625
+long  2.962890625
+
+long  1.482421875
+long  -0.8515625
 fEndOutputWeights
 
 pub null()
@@ -110,13 +110,10 @@ pub start() : result
 
 pub drive_nn(pInput, pOutput) | index, pout
 ' translate between demo_dual_motor_rc input/output
-'   input: boolean, lidar detection (L, FL, F, FR, R)
+'   input: 0.0-1.0, lidar detection range (L, FL, F, FR, R)
 '   output: -100 to 100, left/right motor speed
 ' 583us / 355us with approx sigmoid
-  repeat index from 0 to InputNodes-1
-    fInput[index] := long[pInput][index]? 1.0 : 0.0                             ' convert boolean inputs to float 0.0, 1.0
-
-  pout := InputToOutput(@fInput)                                                ' input to NN to obtain output
+  pout := InputToOutput(pInput)                                                 ' input to NN to obtain output
 
   repeat index from 0 to OutputNodes-1
     long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert 0 -> +1 to -100 to 100
@@ -124,7 +121,7 @@ pub drive_nn(pInput, pOutput) | index, pout
 
 pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum
 ' core of the neutral network
-' input nodes are  5: 0.0/1.0 assumption is true if something left/front-left, front, front-right, right
+' input nodes are  5: 0.0-1.0 assumption is true if something left/front-left, front, front-right, right
 ' output nodes are 2: 0.0-1.0 left/right motor 0 is full speed backwards, 0.5 is stopped, 1.0 is full speed forwards
 ' hidden nodes are 6
 '
@@ -164,36 +161,38 @@ VAR
 DAT
 lidardisp   byte "L#F#R", 0
 
-PUB updatedisplaylidar(pin) : result | i
+PUB updatedisplaylidar(pfin) : result | i
 ' convert lidar detection into displayable string
   strcopy(@disp, @lidardisp, 5)
   repeat i from 0 to 4
-    ifnot long[pin][i]
+    if utilities.frel(long[pfin][i], 0.5, utilities.FLT)                    ' <=.
       disp[i] := " "
   return @disp
 
 ' set of tests that run the Lidar simultated inputs through the neutral network and prints the results
 '
 DAT
-testinputs
-        long false, false, false, false, false          ' test1
-        long  true,  true,  true,  true,  true          ' test2
-        long false, false,  true, false, false          ' test3
-        long false,  true,  true,  true, false          ' test4
-        long  true,  false, true, false,  true          ' test5
-        long  true,  true,  true, false, false          ' test6
-        long false, false,  true,  true,  true          ' test7
-        long  true,  true,  true,  true, false          ' test8
-endtestinputs
+ftestinputs
+        long 0.0, 0.0, 0.0, 0.0, 0.0            ' test1
+        long 1.0, 1.0, 1.0, 1.0, 1.0            ' test2
+        long 0.0, 0.0, 1.0, 0.0, 0.0            ' test3
+        long 0.0, 1.0, 1.0, 1.0, 0.0            ' test4
+        long 1.0, 0.0, 1.0, 0.0, 1.0            ' test5
+        long 1.0, 1.0, 1.0, 0.0, 0.0            ' test6
+        long 0.0, 0.0, 1.0, 1.0, 1.0            ' test7
+        long 1.0, 1.0, 1.0, 1.0, 0.0            ' test8
+        long 0.5, 0.5, 0.5, 0.5, 0.5            ' test9
+        long 0.0, 0.0, 0.5, 0.0, 0.0            ' test10
+endftestinputs
 
-pub test_nn() | ptest, nout[2], i, t, clk
+pub test_nn() | pftest, nout[2], i, t, clk
 ' run set of tests on nn
 '
   clk := clkfreq/1_000_000
-  repeat i from 0 to ((@endtestinputs - @testinputs)/(4*5))-1
-    ptest := @long[@testinputs][5*i]
+  repeat i from 0 to ((@endftestinputs - @ftestinputs)/(4*5))-1
+    pftest := @long[@ftestinputs][5*i]
     t := getct()
-    drive_nn(ptest, @nout)
+    drive_nn(pftest, @nout)
     t := getct() - t
-    debug("test", udec_(i+1), " ", udec_(t/clk), "us lidar=(", zstr_(updatedisplaylidar(ptest)), ") motors= ", sdec_long_array_(@nout, 2))
+    debug("test", udec_(i+1), " ", udec_(t/clk), "us lidar=(", zstr_(updatedisplaylidar(pftest)), ") motors= ", sdec_long_array_(@nout, 2))
 '
