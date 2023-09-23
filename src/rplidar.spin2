@@ -88,6 +88,9 @@ CON
 
   MAXROTATIONS                  = 5                                             'measurements older than this are ignored
 
+OBJ
+  utilities     : "utilities"
+
 VAR
   long txpin, rxpin, motorpin                                                   ' start configuration
   long Cog, notstopped
@@ -144,17 +147,21 @@ PUB stop()
   pinclear(txpin)                                                               ' clear pins
   pinclear(rxpin)
 
-PUB checkdistance(angle, deltaangle, distance_) : ok | index, current
-' check distances +- delta, if any less than distance then return true
-' return false if there is nothing < distance @ angle +- deltaangle
-  current := getms()
+PUB checkdistance(angle, deltaangle, mindistance_, maxdistance_) : fresult | index, temp
+' check distances +- delta
+'   < mindistance_ -> 1.0
+'   > maxdistance_ -> 0.0
+'   else range between 1.0 and 0.0 reducing as distance gets larger
+'   return smallest distance in deltaangle
   'debug("checkdistance ", sdec(angle), " ", sdec(deltaangle), " ", sdec(distance_))
+  fresult := 0                                                                  ' start with max distance
   repeat index from angle-deltaangle to angle+deltaangle
-    if disrotation[(index+360)//360] + MAXROTATIONS +< rotations                ' more than max allowed rotations old
+    if disrotation[(index+360)//360] + MAXROTATIONS +< rotations                ' more than max allowed rotations old so skip
       next
-    if distance[(index+360)//360] +< distance_                                  ' in case -ve and/or over 360
-      'debug("checkdistance ", sdec(index), " ", sdec_((index+360)//360), " ", sdec_(distance[(index+360)//360]), " ", sdec(distance_))
-      ok := true
+    if (temp := utilities.map(distance[(index+360)//360], mindistance_, maxdistance_, 1000, 0)) > fresult ' keep the smallest distance
+      fresult := temp
+  fresult := float(fresult) /. 1000.0                                           ' convert to 0.0<->1.0
+  debug("checkdistance ", sdec(angle), " ", fdec(fresult))
 
 PRI motoron()
   PINHIGH(motorpin)                                                             ' high starts motor
