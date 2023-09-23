@@ -132,8 +132,8 @@ pub cart_pol(x, y) : r, t
   end
 '
 CON
-  fposlimit        = 4.5
-  fneglimit        = -4.5
+  fposlimit        = 16.0
+  fneglimit        = -16.0
 
 ' equilivalent
 '   return 1.0/(1.0 + exp(-x))
@@ -180,7 +180,6 @@ pub sigmoid(fin) : result | fterm, fterm1, fterm2, fterm3
     result := 1.0 /. (1.0 +. fterm3)
 '
 con { license }
-
 {{
 
   Terms of Use: MIT License
