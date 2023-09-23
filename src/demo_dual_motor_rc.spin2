@@ -407,34 +407,37 @@ CON
   RIGHT2ANGLE   = 270                                                           ' angle to right
   DELTAANGLE    = 23                                                            ' +- angle when checking distance
   MINDISTANCE   = 500                                                           ' min distance in mm
-
+  MAXDISTANCE   = 2000
   NNSPEEDRATIO  = 2                                                             ' ratio to slowdown bot
 
 VAR
-  long lidarmeas[5]
+  long flidarmeas[5]
   long pdisp
 
-PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent
+PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent, speeddiv, rngMin, rngMax
 
   ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
   updatetelemetry()
   debug("  AutoRoam Starting: ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
 
   repeat
-    lidarmeas[0] := lidar.checkdistance(LEFT2ANGLE,  DELTAANGLE, MINDISTANCE)   ' left
-    lidarmeas[1] := lidar.checkdistance(LEFT1ANGLE,  DELTAANGLE, MINDISTANCE)   ' left front
-    lidarmeas[2] := lidar.checkdistance(FRONTANGLE,  DELTAANGLE, MINDISTANCE)   ' front
-    lidarmeas[3] := lidar.checkdistance(RIGHT1ANGLE, DELTAANGLE, MINDISTANCE)   ' right front
-    lidarmeas[4] := lidar.checkdistance(RIGHT2ANGLE, DELTAANGLE, MINDISTANCE)   ' right
-    pdisp := nn.updatedisplaylidar(@lidarmeas)
+    speeddiv := remoteCtl.readchannel(remoteCtl.CTL_VRB)
+    rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_VRB)
+    speeddiv := map(speeddiv, rngMin, rngMax, 1, 10)
+    flidarmeas[0] := lidar.checkdistance(LEFT2ANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' left
+    flidarmeas[1] := lidar.checkdistance(LEFT1ANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' left front
+    flidarmeas[2] := lidar.checkdistance(FRONTANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' front
+    flidarmeas[3] := lidar.checkdistance(RIGHT1ANGLE, DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' right front
+    flidarmeas[4] := lidar.checkdistance(RIGHT2ANGLE, DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' right
+    pdisp := nn.updatedisplaylidar(@flidarmeas)
 
     updatetelemetry()
 
     ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
-    nn.drive_nn(@lidarmeas, @ltmotor)                                           ' give lidar readings to nn, get left/right motor power
-    debug("  AutoRoam: (", zstr_(@pdisp), ") ", sdec(ltmotor), " ", sdec(rtmotor), " ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
-    ltmotor /= NNSPEEDRATIO
-    rtmotor /= NNSPEEDRATIO
+    nn.drive_nn(@flidarmeas, @ltmotor)                                          ' give lidar readings to nn, get left/right motor power
+    debug("  AutoRoam: (", zstr_(@pdisp), ") ", sdec(ltmotor), " ", sdec(rtmotor), " ", sdec(speeddiv), " ", fdec(osensor[YAW]), " ", sdec(ltcurrent), " ", sdec(rtcurrent))
+    ltmotor /= speeddiv
+    rtmotor /= speeddiv
     wheels.driveAtPower(ltmotor, rtmotor)
     waitms(250)                                                                 ' let bot move
   while remoteCtl.swIsOn(remoteCtl.CH_12) == false                              ' done?
