@@ -74,8 +74,8 @@ CON { fixed io pins }
 
   ' USFSMAX_VCC = 3.3V
   ' USFSMAX_GND
-  USFSMAX_SDA                   = 3                             ' i2c pins for IMU
-  USFSMAX_SCL                   = 4                             ' different I2C bus from motor driver as supports much faster clock speed
+  USFSMAX_SDA                   = 9                             ' i2c pins for IMU
+  USFSMAX_SCL                   = 8                             ' different I2C bus from motor driver as supports much faster clock speed
                                                                 ' CLK speed of 3Mhz
   USFSMAX_RESET                 = -1                            ' reset pin is optional
 
@@ -391,10 +391,12 @@ PRI doOneRotation() | ltdegree, rtdegree
 
 PRI updatetelemetry()
 ' update telemetry
-    if usfsavailable
+  'debug("telemetry ", uhex(usfsavailable))
+    if usfsavailable == 0
         _, qt[0], qt[1], qt[2], qt[3] := imu.getMin()                           ' get yaw direction from imu
         osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE] := imu.computeIMUFixed(qt[0], qt[1], qt[2], qt[3])
         telemetry.setimu(osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE]) ' imu telemetry
+        'debug("usfs ", fdec(osensor[YAW]), " ", fdec(osensor[PITCH]), " ", fdec(osensor[ROLL]), " ", fdec(osensor[PRESSURE]))
     telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER))  ' battery voltage telemetry
     nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
     telemetry.setcurrent(nLtmAmps, nRtmAmps)                                    ' current
