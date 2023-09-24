@@ -141,13 +141,13 @@ PUB stop()
 
   wordfill(@distance, $ffff, 360)                                               ' long distance
   longfill(@disrotation, 0, 360)                                                ' reset rotations
-  rotations := 0                                                                ' reset rototation counter
+  rotations := MAXROTATIONS                                                     ' max rototations more than init distotation
 
   motoroff()                                                                    ' make sure motor stopped
   pinclear(txpin)                                                               ' clear pins
   pinclear(rxpin)
 
-PUB checkdistance(angle, deltaangle, mindistance_, maxdistance_) : fresult | index, temp
+PUB checkdistance(angle, deltaangle, mindistance_, maxdistance_) : fresult | index, temp, temp1
 ' check distances +- delta
 '   < mindistance_ -> 1.0
 '   > maxdistance_ -> 0.0
@@ -155,13 +155,16 @@ PUB checkdistance(angle, deltaangle, mindistance_, maxdistance_) : fresult | ind
 '   return smallest distance in deltaangle
   'debug("checkdistance ", sdec(angle), " ", sdec(deltaangle), " ", sdec(distance_))
   fresult := 0                                                                  ' start with max distance
+  temp1 := $7fff_ffff
   repeat index from angle-deltaangle to angle+deltaangle
     if disrotation[(index+360)//360] + MAXROTATIONS +< rotations                ' more than max allowed rotations old so skip
       next
     if (temp := utilities.map(distance[(index+360)//360], mindistance_, maxdistance_, 1000, 0)) > fresult ' keep the smallest distance
       fresult := temp
+    if temp < temp1
+        temp1 := temp
   fresult := float(fresult) /. 1000.0                                           ' convert to 0.0<->1.0
-  debug("checkdistance ", sdec(angle), " ", fdec(fresult))
+  debug("checkdistance ", sdec(angle), " ", fdec(fresult), " ", udec_(temp1), " ", udec_(distance[(angle+360)//360]), " ", udec_(rotations), " ", udec_(disrotation[(angle+360)//360]))
 
 PRI motoron()
   PINHIGH(motorpin)                                                             ' high starts motor
