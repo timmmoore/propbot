@@ -131,14 +131,15 @@ pub cart_pol(x, y) : r, t
     getqx     t
   end
 '
+{
 CON
-  fposlimit        = 16.0
-  fneglimit        = -16.0
+  fposlimit        = 7.0
+  fneglimit        = -7.0
 
 ' equilivalent
 '   return 1.0/(1.0 + exp(-x))
 '
-pub sigmoid1(fin) : result | fsum, fterm, fterm1, fterm2, fterm3, fterm4, fterm5, fterm6, fterm7, fterm8
+pub sigmoid(fin) : result | fsum, fterm, fterm1, fterm2, fterm3, fterm4, fterm5, fterm6, fterm7, fterm8
 ' output range 0 to +1
   fin := -.fin
                                                         ' make sure in range for the tayor series to converge
@@ -158,6 +159,11 @@ pub sigmoid1(fin) : result | fsum, fterm, fterm1, fterm2, fterm3, fterm4, fterm5
     fterm8 := fterm7 *. (fin /. 10.0)
     fsum := fin +. fterm +. fterm1 +. fterm2 +. fterm3 +. fterm4 +. fterm5 +. fterm6 +. fterm7 +. fterm8
     result := 1.0 /. (2.0 +. fsum)
+}
+
+CON
+  fposlimit        = 16.0
+  fneglimit        = -16.0
 
 ' approx log_w_approx_exp_no_overflow16_clamped
 ' see https://scicomp.stackexchange.com/questions/42186/faster-logistic-function
