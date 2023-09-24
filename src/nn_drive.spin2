@@ -9,8 +9,8 @@
 }
 
 CON
-' need to match training data and generated weights
-InputNodes      = 5                                                             ' input nodes,1 per lidar input
+' needs to match training data and generated weights
+InputNodes      = 5                                                             ' input nodes, 1 per lidar input
 HiddenNodes     = 6                                                             ' hidden nodes
 OutputNodes     = 2                                                             ' output nodes, 1 per motor
 
@@ -112,12 +112,11 @@ pub drive_nn(pInput, pOutput) | index, pout
 ' translate between demo_dual_motor_rc input/output
 '   input: 0.0-1.0, lidar detection range (L, FL, F, FR, R)
 '   output: -100 to 100, left/right motor speed
-' 583us / 355us with approx sigmoid
+' 320-324us with log_w_approx_exp_no_overflow16_clamped sigmoid
   pout := InputToOutput(pInput)                                                 ' input to NN to obtain output
 
   repeat index from 0 to OutputNodes-1
     long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert 0 -> +1 to -100 to 100
-  'debug(" out1 ", sdec_long_array(pOutput, OutputNodes))
 
 pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum
 ' core of the neutral network
@@ -126,10 +125,8 @@ pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, 
 ' hidden nodes are 6
 '
 ' cordic operations (1 multiply)*(inputnodes + outputnodes)*hiddennodes
-'                   hiddennodes+outputnode * sigmoid 9 * (1 multiply, 1 divide) + 1 divide
-'                   hiddennodes+outputnode * approx sigmoid 4 multiply, 2 divide
-' total = 114 multiply, 80 divide, ~130us, so 22% of excution time
-' total approx = 72 multiply, 16 divide, ~59us, so 17% of excution time
+'                   (hiddennodes+outputnode) * sigmoid(4 multiply, 2 divide)
+' total approx = (42+32) 74 multiply, 16 divide, ~60us, so 19% of excution time
 '
   ' Compute hidden layer activations
   ' float HiddenWeights[InputNodes + 1][HiddenNodes]                            ' weight per input node per hidden node
@@ -173,16 +170,18 @@ PUB updatedisplaylidar(pfin) : result | i
 '
 DAT
 ftestinputs
-        long 0.0, 0.0, 0.0, 0.0, 0.0            ' test1
-        long 1.0, 1.0, 1.0, 1.0, 1.0            ' test2
-        long 0.0, 0.0, 1.0, 0.0, 0.0            ' test3
-        long 0.0, 1.0, 1.0, 1.0, 0.0            ' test4
-        long 1.0, 0.0, 1.0, 0.0, 1.0            ' test5
-        long 1.0, 1.0, 1.0, 0.0, 0.0            ' test6
-        long 0.0, 0.0, 1.0, 1.0, 1.0            ' test7
-        long 1.0, 1.0, 1.0, 1.0, 0.0            ' test8
-        long 0.5, 0.5, 0.5, 0.5, 0.5            ' test9
-        long 0.0, 0.0, 0.5, 0.0, 0.0            ' test10
+        long 0.0,  0.0,  0.0,  0.0,  0.0        ' test1
+        long 1.0,  1.0,  1.0,  1.0,  1.0        ' test2
+        long 0.0,  0.0,  1.0,  0.0,  0.0        ' test3
+        long 0.0,  1.0,  1.0,  1.0,  0.0        ' test4
+        long 1.0,  0.0,  1.0,  0.0,  1.0        ' test5
+        long 1.0,  1.0,  1.0,  0.0,  0.0        ' test6
+        long 0.0,  0.0,  1.0,  1.0,  1.0        ' test7
+        long 1.0,  1.0,  1.0,  1.0,  0.0        ' test8
+        long 0.5,  0.5,  0.5,  0.5,  0.5        ' test9
+        long 0.0,  0.0,  0.5,  0.0,  0.0        ' test10
+        long 0.25, 0.25, 0.5,  0.25, 0.25       ' test11
+        long 0.0,  0.4,  0.5,  0.4,  0.0        ' test12
 endftestinputs
 
 pub test_nn() | pftest, nout[2], i, t, clk
@@ -196,3 +195,30 @@ pub test_nn() | pftest, nout[2], i, t, clk
     t := getct() - t
     debug("test", udec_(i+1), " ", udec_(t/clk), "us lidar=(", zstr_(updatedisplaylidar(pftest)), ") motors= ", sdec_long_array_(@nout, 2))
 '
+CON { license }
+{{
+
+ -------------------------------------------------------------------------------------------------
+  MIT License
+
+  Copyright (c) 2023 Iron Sheep Productions, LLC
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+ =================================================================================================
+}}
