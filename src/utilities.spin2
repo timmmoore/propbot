@@ -163,27 +163,27 @@ pub sigmoid(fin) : result | fsum, fterm, fterm1, fterm2, fterm3, fterm4, fterm5,
 
 CON
   fposlimit        = 16.0
-  fneglimit        = -16.0
 
 ' approx log_w_approx_exp_no_overflow16_clamped
 ' see https://scicomp.stackexchange.com/questions/42186/faster-logistic-function
+'       if x >= 16
+'         sigmod = 1
+'       else
+'         sigmoid = 1/(1 + (1-x/16)^16)
 '
-pub sigmoid(fin) : result | fterm, fterm1, fterm2, fterm3
+pub sigmoid(fin) : result
 ' output range 0 to +1
-  fin := -.fin
                                                         ' make sure in range for the tayor series to converge
-  if frel(fin, fposlimit, FGT)                          ' >. handle upper limit
+  if frel(fin, fposlimit, FGTE)                         ' >. handle upper limit
     result := 1.0
-  elseif frel(fin, fneglimit, FLT)                      ' <. handle lower limit
-    result := 0.0
   else
     ' n = 16, so (1-fin/16)^16
-    fin := 1.0 +. fin /. 16.0
-    fterm := fin *. fin
-    fterm1 := fterm *. fterm
-    fterm2 := fterm1 *. fterm1
-    fterm3 := fterm2 *. fterm2
-    result := 1.0 /. (1.0 +. fterm3)
+    fin := 1.0 -. fin /. 16.0                           ' 1-fin/16
+    fin := fin *. fin                                   ' ^2
+    fin := fin *. fin                                   ' ^4
+    fin := fin *. fin                                   ' ^8
+    fin := fin *. fin                                   ' ^16
+    result := 1.0 /. (1.0 +. fin)
 '
 con { license }
 {{
