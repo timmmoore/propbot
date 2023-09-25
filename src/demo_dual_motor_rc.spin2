@@ -369,8 +369,8 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 doAutoRoam()
                 nDoingAutoRoam := false
 
-        'if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
-        if utilities.frel(fvoltage, BATTERY_MINIMUM, utilities.FLT)
+        if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
+        'if utilities.frel(fvoltage, BATTERY_MINIMUM, utilities.FLT)
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
             bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
         'debug("--> Battery Voltage ", fdec(fvoltage), fdec(BATTERY_MINIMUM))
