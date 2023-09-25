@@ -112,13 +112,13 @@ pub drive_nn(pInput, pOutput) | index, pout
 ' translate between demo_dual_motor_rc input/output
 '   input: 0.0-1.0, lidar detection range (L, FL, F, FR, R)
 '   output: -100 to 100, left/right motor speed
-' 320-324us with log_w_approx_exp_no_overflow16_clamped sigmoid
+' 247-341us with log_w_approx_exp_no_overflow16_clamped sigmoid
   pout := InputToOutput(pInput)                                                 ' input to NN to obtain output
 
   repeat index from 0 to OutputNodes-1
     long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert 0 -> +1 to -100 to 100
 
-pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum
+pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum, t1
 ' core of the neutral network
 ' input nodes are  5: 0.0-1.0 assumption is true if something left/front-left, front, front-right, right
 ' output nodes are 2: 0.0-1.0 left/right motor 0 is full speed backwards, 0.5 is stopped, 1.0 is full speed forwards
@@ -135,7 +135,8 @@ pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, 
     faccum := long[@fHiddenWeights][tempindex++]                                ' bias to start adding up weights
     tempindex1 := outer
     repeat inner from 0 to InputNodes-1
-      faccum := faccum +. (long[pfTestInput][inner] *. long[@fHiddenWeights][tempindex1]) ' sum of weights per hidden node per input node
+      if (t1 := long[pfTestInput][inner]) <> 0                                  ' skip the 0 (note not checking for float 0.0)
+        faccum := faccum +. (t1 *. long[@fHiddenWeights][tempindex1])           ' sum of weights per hidden node per input node
       tempindex1 += HiddenNodes                                                 ' next hidden node
     fHidden[outer] := utilities.sigmoid(faccum)                                 ' total per hidden node, curve flattened using logistic function
 
