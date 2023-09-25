@@ -2,14 +2,15 @@
   port of
         http://robotics.hobbizine.com/arduinoann.html
 
-  no training capability use
-        https://github.com/JonComo/Arduino_weight_trainer
+  provides training capability for nn_drive
+  but recommend use
+          https://github.com/timmoore/propbot/trainer
 }
 
 CON
-PatternCount    = 16
-InputNodes      = 4
-HiddenNodes     = 5
+PatternCount    = 6
+InputNodes      = 5
+HiddenNodes     = 6
 OutputNodes     = 2
 
 OBJ
@@ -22,40 +23,20 @@ fInitialWeightMax        long 0.5
 fSuccess                 long 0.0015
 
 fInput {[PatternCount][InputNodes]}
-  long 0.0, 1.0, 1.0, 0.0       ' LIGHT ON LEFT AND RIGHT
-  long 0.0, 1.0, 0.0, 0.0       ' LIGHT ON LEFT
-  long 1.0, 1.0, 1.0, 0.0       ' LIGHT ON TOP, LEFT, and RIGHT
-  long 1.0, 1.0, 0.0, 0.0       ' LIGHT ON TOP and LEFT
-  long 0.0, 0.0, 1.0, 0.0       ' LIGHT ON RIGHT
-  long 1.0, 0.0, 0.0, 0.0       ' LIGHT ON TOP
-  long 0.0, 0.0, 0.0, 0.0       ' NO LIGHT
-  long 0.0, 0.0, 0.0, 1.0       ' LIGHT ON BOTTOM
-  long 0.0, 1.0, 0.0, 1.0       ' LIGHT ON BOTTOM AND LEFT
-  long 0.0, 0.0, 1.0, 1.0       ' LIGHT ON BOTTOM AND RIGHT
-  long 0.0, 1.0, 1.0, 1.0       ' LIGHT ON BOTTOM, LEFT, and RIGHT
-  long 1.0, 0.0, 0.0, 1.0       ' LIGHT ON TOP AND BOTTOM
-  long 1.0, 1.0, 0.0, 1.0       ' LIGHT ON TOP, BOTTOM, and LEFT
-  long 1.0, 0.0, 1.0, 1.0       ' LIGHT ON TOP, BOTTOM, and RIGHT
-  long 1.0, 0.0, 1.0, 0.0       ' LIGHT ON TOP AND RIGHT
-  long 1.0, 1.0, 1.0, 1.0       ' LIGHT ON ALL
+  long 0.0, 0.0, 0.0, 0.0, 0.0
+  long 1.0, 1.0, 1.0, 1.0, 1.0
+  long 0.0, 0.0, 1.0, 0.0, 0.0
+  long 0.0, 1.0, 1.0, 1.0, 0.0
+  long 0.5, 0.5, 0.5, 0.5, 0.5
+  long 0.0, 0.0, 0.5, 0.0, 0.0
 
 fTarget {[PatternCount][OutputNodes]}
-  long 0.65, 0.55       ' LEFT MOTOR SLOW
-  long 0.75, 0.5        ' LEFT MOTOR FASTER
-  long 0.2,  0.2        ' BOTH MOTORS FULL BACKWARDS
-  long 1.0,  0.2        ' MOTOR LEFT FULL FORWARD, RIGHT BACKWARDS
-  long 0.5,  0.75       ' MOTOR LEFT STOPPED, RIGHT FORWARDS
-  long 0.3,  0.3        ' BOTH BACKWARDS
-  long 0.5,  0.5        ' BOTH MOTORS STOPPED
-  long 0.75, 0.75
-  long 1.0,  0.75
-  long 0.75, 1.0
-  long 1.0,  1.0
-  long 1.0,  0.0
-  long 1.0,  0.75
-  long 0.75, 1.0
-  long 0.2,  1.0
-  long 0.65, 0.65
+  long 1.0, 1.0
+  long 0.0, 0.0
+  long 0.6, 0.7
+  long 0.8, 0.2
+  long 0.6, 0.6
+  long 0.5, 0.6
 
 VAR
   long fError
@@ -64,7 +45,7 @@ VAR
   long i, j
   long fAccum
   long p, q
-  long ReportEvery1000
+  long ReportEvery100
   long TrainingCycle
   long fRando
 
@@ -88,7 +69,7 @@ pub null()
 pub start()
   fError := 2.0
 
-  ReportEvery1000 := 1
+  ReportEvery100 := 1
   repeat p from 0 to PatternCount-1
     RandomizedIndex[p] := p
 
@@ -108,7 +89,7 @@ pub train_nn() | t, t1
   debug("exp test2 ", fdec(utilities.sigmoid(-5.0)))
   debug("exp test3 ", fdec(utilities.sigmoid(-440.0)))
   debug("exp test4 ", fdec(utilities.sigmoid(55.0)))
-  debug(`SCOPE_XY MyXY SIZE 120 COLOR black black RANGE 1_000_000 SAMPLES 0 'MSE')
+  debug(`SCOPE_XY MyXY SIZE 120 COLOR black black RANGE 100_000 SAMPLES 0 'MSE')
   prog_start := 0
   debug("training init ", sdec(HiddenNodes), " ", sdec(InputNodes))
 
@@ -123,7 +104,7 @@ pub train_nn() | t, t1
       fChangeHiddenWeights[t+i] := 0.0
       fRando := float(rand(128)) /. 128.0
       fHiddenWeights[t+i] := 2.0 *. (fRando -. 0.5) *. long[@fInitialWeightMax]
-      debug("rand pattern ", sdec(i), " ", sdec(j), " ", sdec(t), " ", fdec(fChangeHiddenWeights[t+i]), " ", fdec(fHiddenWeights[t+i]))
+      'debug("rand pattern ", sdec(i), " ", sdec(j), " ", sdec(t), " ", fdec(fChangeHiddenWeights[t+i]), " ", fdec(fHiddenWeights[t+i]))
 
   ' Initialize OutputWeights and ChangeOutputWeights
   ' float ChangeOutputWeights[HiddenNodes + 1][OutputNodes];
@@ -135,7 +116,7 @@ pub train_nn() | t, t1
       fChangeOutputWeights[t+i] := 0.0
       fRando := float(rand(128)) /. 128.0
       fOutputWeights[t+i] := 2.0 *. (fRando -. 0.5) *. long[@fInitialWeightMax]
-      debug("rand pattern1 ", sdec(i), " ", sdec(j), " ", sdec(t), " ", fdec(fChangeOutputWeights[t+i]), " ", fdec(fOutputWeights[t+i]))
+      'debug("rand pattern1 ", sdec(i), " ", sdec(j), " ", sdec(t), " ", fdec(fChangeOutputWeights[t+i]), " ", fdec(fOutputWeights[t+i]))
 
   ' Begin training
   repeat TrainingCycle from 1 to 2147483647-1
@@ -214,17 +195,26 @@ pub train_nn() | t, t1
           fOutputWeights[t1+i] := fOutputWeights[t1+i] +. fChangeOutputWeights[t1+i]
 
     ' Every 100 cycles send data to terminal for display
-    ReportEvery1000 := ReportEvery1000 - 1
-    if ReportEvery1000 == 0
+    ReportEvery100 := ReportEvery100 - 1
+    if ReportEvery100 == 0
 
       'debug("TrainingCycle: ", sdec(TrainingCycle), " Error: ", sdec(Error))
-      debug(`MyXY `(TrainingCycle/100-1_000_000,round(fError*.100_000.0)))
+      debug(`MyXY `(TrainingCycle/100-100_000,round(fError*.100_000.0)))
 
-      ReportEvery1000 := (TrainingCycle == 1)? 99 : 100
+      ReportEvery100 := (TrainingCycle == 1)? 99 : 100
 
     ' If error rate is less than pre-determined threshold then end
     if fError < long[@fSuccess]
       quit
 
   debug("Stop training ", udec(TrainingCycle), " ", fdec(fError))
+  debug("fHiddenWeights")
+  repeat i from 0 to ((InputNodes + 1)*HiddenNodes)-1
+    debug("long ", fdec_(fHiddenWeights[i]))
+  debug("fEndHiddenWeights")
+
+  debug("fOutputWeights")
+  repeat i from 0 to ((HiddenNodes + 1)*OutputNodes)-1
+    debug("long ", fdec_(fOutputWeights[i]))
+  debug("fEndOutputWeights")
 '

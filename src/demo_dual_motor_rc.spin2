@@ -75,8 +75,7 @@ CON { fixed io pins }
   ' USFSMAX_VCC = 3.3V
   ' USFSMAX_GND
   USFSMAX_SDA                   = 9                             ' i2c pins for IMU
-  USFSMAX_SCL                   = 8                             ' different I2C bus from motor driver as supports much faster clock speed
-                                                                ' CLK speed of 3Mhz
+  USFSMAX_SCL                   = 8                             ' CLK speed of 3Mhz
   USFSMAX_RESET                 = -1                            ' reset pin is optional
 
   ' Bellevue, WA 98008
@@ -90,7 +89,8 @@ CON { fixed io pins }
   YAW                           = 2
   PRESSURE                      = 3
 
-  TESTTRAINING                  = false 'true
+  TESTTRAINING                  = false                 ' run tests on the trained model
+  TRAINING                      = false                 ' use training data to generate model weights
 
 OBJ { our Drive Subsystem }
 
@@ -103,6 +103,8 @@ OBJ { our Drive Subsystem }
     lidar       : "rplidar"                             ' rplidar A1M8, 1 cog
     imu         : "usfsmax"                             ' imu
     nn          : "nn_drive"                            ' neural network auto drive
+    nntraining  : "nn_training"                         ' training for above neutral network
+    utilities   : "utilities"
 
 VAR
     long    remoteCog, telemetryCog, lidarCog
@@ -145,6 +147,12 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
         battery.start(BATTERY_ANALOG, BATTERY_LOW, BATTERY_HIGH)
         usfsavailable := imu.startx(USFSMAX_SCL, USFSMAX_SDA, USFSMAX_RESET, @Config, yawoffset)
         debug(if(usfsavailable), "IMU start error: ", uhex(usfsavailable))
+
+        if TRAINING
+          nntraining.start()
+          nntraining.train_nn()
+          repeat
+            waitms(1000)
 
         if nn.start() <> 0
           debug(" Neural Network sizs mis-match")
@@ -362,7 +370,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 nDoingAutoRoam := false
 
         'if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
-        if round(fvoltage*.10.0) < round(BATTERY_MINIMUM*.10.0)
+        if utilities.frel(fvoltage, BATTERY_MINIMUM, utilities.FLT)
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
             bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
         'debug("--> Battery Voltage ", fdec(fvoltage), fdec(BATTERY_MINIMUM))
@@ -391,7 +399,6 @@ PRI doOneRotation() | ltdegree, rtdegree
 
 PRI updatetelemetry()
 ' update telemetry
-  'debug("telemetry ", uhex(usfsavailable))
     if usfsavailable == 0
         _, qt[0], qt[1], qt[2], qt[3] := imu.getMin()                           ' get yaw direction from imu
         osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE] := imu.computeIMUFixed(qt[0], qt[1], qt[2], qt[3])
