@@ -4,7 +4,11 @@
   Also read
         https://mattmazur.com/2015/03/17/a-step-by-step-backpropagation-example/
 
-  Only drive capability to train and generate NN weights
+  Only drive capability
+
+  To train and generate NN weights use either
+        nn_training.spin2
+  or (recommended)
         https://github.com/timmoore/propbot/trainer
 }
 
@@ -28,6 +32,65 @@ DAT
 ' The first are weights for the hidden nodes:  (InputNodes+1)  * HiddenNodes
 ' The second are weights for the output nodes: (HiddenNodes+1) * OutputNodes
 '
+{
+' from spin2 trainer: nn_train.spin2
+fHiddenWeights
+ long 7.072293e-01
+ long 1.146613e-01
+ long 2.863246e+00
+ long -2.487716e-02
+ long -6.357699e-01
+ long 3.908694e-01
+ long -1.908637e-01
+ long 9.856998e-02
+ long -5.147691e-02
+ long 3.703414e+00
+ long 3.763179e-01
+ long 2.729059e+00
+ long -1.485012e+00
+ long -2.462658e+00
+ long -6.096124e-01
+ long -8.521959e+00
+ long 1.312684e+00
+ long 1.453432e-01
+ long 2.788676e-02
+ long 5.950765e-02
+ long -3.249168e-01
+ long 2.976849e+00
+ long -3.033682e-01
+ long 2.549369e+00
+ long 1.246289e+00
+ long 2.162237e-01
+ long 2.378869e+00
+ long -5.248801e-01
+ long -5.029560e-01
+ long 8.127416e-01
+ long 2.893655e-01
+ long -1.134241e+00
+ long -3.198640e+00
+ long 1.050889e+00
+ long -2.811598e-01
+ long -4.828155e+00
+ fEndHiddenWeights
+ fOutputWeights
+ long -2.308291e+00
+ long -1.637372e+00
+ long -2.867199e-01
+ long 1.076637e+00
+ long -4.864613e+00
+ long -1.090867e+00
+ long 5.831216e+00
+ long 4.292695e+00
+ long 1.442060e+00
+ long 2.020371e+00
+ long -1.597189e+00
+ long -5.768107e+00
+ long 3.180980e-02
+ long -2.769673e-01
+ fEndOutputWeights
+'}
+
+' from PC trainer
 fHiddenWeights
 long -0.771484375
 long  1.359375
@@ -94,6 +157,7 @@ long  2.962890625
 long  1.482421875
 long  -0.8515625
 fEndOutputWeights
+'}
 
 pub null()
 
@@ -135,7 +199,7 @@ pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, 
     faccum := long[@fHiddenWeights][tempindex++]                                ' bias to start adding up weights
     tempindex1 := outer
     repeat inner from 0 to InputNodes-1
-      if (t1 := long[pfTestInput][inner]) <> 0                                  ' skip the 0 (note not checking for float 0.0)
+      if (t1 := long[pfTestInput][inner]) <> 0                                  ' skip the 0 (note only checking for bits 0)
         faccum := faccum +. (t1 *. long[@fHiddenWeights][tempindex1])           ' sum of weights per hidden node per input node
       tempindex1 += HiddenNodes                                                 ' next hidden node
     fHidden[outer] := utilities.sigmoid(faccum)                                 ' total per hidden node, curve flattened using logistic function
@@ -163,7 +227,8 @@ PUB updatedisplaylidar(pfin) : result | i
 ' convert lidar detection into displayable string
   strcopy(@disp, @lidardisp, 5)
   repeat i from 0 to 4
-    if utilities.frel(long[pfin][i], 0.5, utilities.FLT)                    ' <=.
+    'if long[pfin][i] <. 0.5
+    if utilities.frel(long[pfin][i], 0.5, utilities.FLT)                    ' <.
       disp[i] := " "
   return @disp
 
