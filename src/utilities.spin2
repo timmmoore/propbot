@@ -74,7 +74,7 @@ PUB frel(w, x, paa): r | y, _FFFFFFFF
                 bitl    w,#31           wcz     'make left-side comparable
                 cmp     w,##$7F800001   wc      'NaN?
         if_z    neg     w                       '+/- %0_xxxxxxxx_mmmmmmmmmmmmmmmmmmmmmmm
-        if_nc   skip    #%111
+        if_nc   skip    #%1111
 
                 bitl    x,#31           wcz     'make right-side comparable
                 cmp     x,##$7F800001   wc      'NaN?
