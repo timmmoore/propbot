@@ -193,17 +193,18 @@ PUB startx(scl, sda, reset, pconfig, offset) : retv | id, stat, Begin
     pinl(reset)
     waitms(1)
     pinf(reset)
-  debug("USFSMAX3")
+  'debug("USFSMAX3")
 
   waitms(10)
   ifnot i2c.setup(scl, sda, I2C_CONFIG_SPEED, i2c.PU_1K5, -1)                   ' i2c @ 100kHz, 1K5 pull-ups
+    debug("USFSMAX E1")
     return $01
   waitms(10)
   'serial.fstr0(string("USFSMAX4 \r"))
 
   if(i2c.present(MAX32660ADDR<<1) == false)
     i2c.stop()
-    debug("USFSMAX6")
+    debug("USFSMAX E2")
     return $02
   i2c.stop()
 
@@ -214,7 +215,7 @@ PUB startx(scl, sda, reset, pconfig, offset) : retv | id, stat, Begin
   waitms(10)
   stat := read8(MAX32660ADDR, FUSION_STATUS)                                    ' Read the coprocessor's current
 
-  debug("USFSMAX ", uhex_(id), " ", sdec(stat))
+  'debug("USFSMAX ", uhex_(id), " ", sdec(stat))
 
   write8(MAX32660ADDR, FUSION_START_STOP, $00)                                  ' stop fusion
   waitms(50)
@@ -236,13 +237,14 @@ PUB startx(scl, sda, reset, pconfig, offset) : retv | id, stat, Begin
     'serial.fstr1(string("USFSMAX status %d\r"), stat)
   ifnot stat
     'serial.str(string("USFSMAX sensor fusion not running!", 13))
+    debug("USFSMAX E4")
     return $04
-  debug("USFSMAX sensor fusion running ", sdec(stat))
+  'debug("USFSMAX sensor fusion running ", sdec(stat))
 
   waitms(10)
   if (stat := read8(MAX32660ADDR, SENS_ERR_STAT)) <> 0
     'serial.fstr1(string("USFSMAX error status %d\r"), stat)
-    debug("USFSMAX error status: ", sdec(stat))
+    debug("USFSMAX E8: ", sdec(stat))
     return $08
   retv := 0
 
