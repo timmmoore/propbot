@@ -104,7 +104,6 @@ OBJ { our Drive Subsystem }
     imu         : "usfsmax"                             ' imu
     nn          : "nn_drive"                            ' neural network auto drive
     nntraining  : "nn_training"                         ' training for above neutral network
-    utilities   : "utilities"
 
 VAR
     long    remoteCog, telemetryCog, lidarCog
@@ -155,7 +154,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
             waitms(1000)
 
         if nn.start() <> 0
-          debug(" Neural Network sizs mis-match")
+          debug(" Neural Network size mis-match")
 
         ' run the tests for the nn
         if TESTTRAINING
@@ -370,7 +369,6 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 nDoingAutoRoam := false
 
         if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
-        'if utilities.frel(fvoltage, BATTERY_MINIMUM, utilities.FLT)
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
             bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
         'debug("--> Battery Voltage ", fdec(fvoltage), fdec(BATTERY_MINIMUM))

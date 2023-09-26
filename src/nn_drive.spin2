@@ -228,7 +228,6 @@ PUB updatedisplaylidar(pfin) : result | i
   strcopy(@disp, @lidardisp, 5)
   repeat i from 0 to 4
     if long[pfin][i] <. 0.5
-    'if utilities.frel(long[pfin][i], 0.5, utilities.FLT)                    ' <.
       disp[i] := " "
   return @disp
 
