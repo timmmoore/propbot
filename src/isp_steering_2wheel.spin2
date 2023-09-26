@@ -799,7 +799,7 @@ VAR { Data Structure for HDMI Debug }
     LONG    pTitlesAr[DBG_GROUPS_CT + 1]    ' first value is max vars
     LONG    pVarCtAr[DBG_GROUPS_CT]
     LONG    pNamesAr[DBG_GROUPS_CT * DBG_MAX_VARS_IN_GROUP]
-    LONG    pValsAr[DBG_GROUPS_CT*DBG_MAX_VARS_IN_GROUP]
+    LONG    pValsAr[DBG_GROUPS_CT * DBG_MAX_VARS_IN_GROUP]
 
 DAT { Literals for HDMI Debug }
 
