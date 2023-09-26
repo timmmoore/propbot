@@ -31,7 +31,7 @@ PUB fullclamp(input, tmininput, tmaxinput) : s
 
 PUB longcomp(p1, p2, count, diff, update) : retv
 ' return true if p1 and p2 not the same with greater then diff delta
-  repeat retv from 0 to count-1
+  repeat count with retv
     if abs(long[p1][retv] - long[p2][retv]) > diff
       quit
   if (retv := retv < count) && (update <> false)
@@ -39,9 +39,8 @@ PUB longcomp(p1, p2, count, diff, update) : retv
 
 PUB longcompf(p1, p2, count, diff, update) : retv
 ' return true if p1 and p2 not the same with float precision with greater than diff delta
-  repeat retv from 0 to count-1
+  repeat count with retv
     if fabs(long[p1][retv] -. long[p2][retv]) >. diff
-    'if frel(fabs(long[p1][retv] -. long[p2][retv]), diff, FGT)
       quit
   if (retv := retv < count) && (update <> false)
     longmove(p1, p2, count)
@@ -141,7 +140,6 @@ pub sigmoid(fin) : result
 ' output range 0 to +1
                                                         ' make sure in range for the tayor series to converge
   if fin >=. fposlimit
-  'if frel(fin, fposlimit, FGTE)                         ' >=. handle upper limit
     result := 1.0
   else
     ' n = 16, so (1-fin/16)^16
@@ -151,6 +149,11 @@ pub sigmoid(fin) : result
     fin := fin *. fin                                   ' ^8
     fin := fin *. fin                                   ' ^16
     result := 1.0 /. (1.0 +. fin)
+
+pub sigmoidDer(fin) : result
+' Derivate for sigmoid
+'   (x - x^2) -> x(1-x)
+  result := fin *. (1.0 -. fin)
 '
 con { license }
 {{
