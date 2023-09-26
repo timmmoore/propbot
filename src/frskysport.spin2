@@ -138,7 +138,8 @@ CON
   STACK_SIZE_LONGS       = 100                          ' Need to test how much we need!
 
 VAR
-  long rxp
+  long rxp, pgsensors, gsensorcount
+  long gsensorCountEntries
   long cognum, clkx
   long s_commandPrim, s_applicationId, s_value
   long r_commandId, r_commandPrim, r_applicationId, r_value
@@ -159,7 +160,12 @@ OBJ
 pub null()
 
 PUB start(pin) : retv | x
-  rxp := pin
+  startEx(pin, @_sensors, _sensorCount)
+
+PUB startEx(pin, pgsensors_, gsensorcount_) : retv | x
+' allow caller to specify sensor table
+  longmove(@rxp, @pin, 3)
+  gsensorCountEntries := gsensorcount * _sensornoentries
 
   pinclear(rxp)                                                                 ' remove old settings
 
@@ -367,30 +373,30 @@ pri updatesensorsent(Index, physicalId) | i, clear
 ' we cant send the 500ms sensor twice while waiting for the 1000ms sensors to be sent.
   lastsensorindex[Index/_sensornoentries] := 1
   clear~~
-  repeat i from 0 to _sensorCount-1
+  repeat gsensorcount with i
     ' is there a sensor for the physical id that hasn't been sent yet
-    if (word[@_sensors][i*_sensornoentries] == physicalId) and (lastsensorindex[i] == 0)
+    if (word[pgsensors][i*_sensornoentries] == physicalId) and (lastsensorindex[i] == 0)
       clear~                                                                    ' then we dont want to reset the lastsensorindex array
       quit
   if clear                                                                      ' all sensors for this physicalid have been sent
-    repeat i from 0 to _sensorCount-1                                           ' so reset lastsensorindex array
-      if (word[@_sensors][i*_sensornoentries] == physicalId)
+    repeat gsensorcount with i                                                  ' so reset lastsensorindex array
+      if (word[pgsensors][i*_sensornoentries] == physicalId)
         lastsensorindex[i]~
 
 pri sendtime(Index) : retv
-  if (getms() - lastsensortime[Index/_sensornoentries]) > word[@_sensors][Index+3] ' send sensor value every 500ms
+  if (getms() - lastsensortime[Index/_sensornoentries]) > word[pgsensors][Index+3] ' send sensor value every 500ms
     lastsensortime[Index/_sensornoentries] := getms()
     retv := true
 
 PRI SendSensor(physicalId) : retv | Index, applicationIdt, valuet, data
-  repeat _sensorCount                                                           ' loop through known sensors, 1 sensor per poll
+  repeat gsensorcount                                                           ' loop through known sensors, 1 sensor per poll
     Index := _sensorIndex
-    _sensorIndex := (_sensorIndex+_sensornoentries) // _sensorCountEntries      ' next entry, increment by amount of sensor info per entry
-    'serial.fstr5(string("sport Sensorindex %d %d %x %x %x\r"), Index, _sensorIndex, physicalId, word[@_sensors][Index], word[@_sensors][Index+1])
-    if (word[@_sensors][Index] == physicalId) and querysensorsent(Index)        ' have a sensor
+    _sensorIndex := (_sensorIndex+_sensornoentries) // gsensorCountEntries      ' next entry, increment by amount of sensor info per entry
+    'serial.fstr5(string("sport Sensorindex %d %d %x %x %x\r"), Index, _sensorIndex, physicalId, word[pgsensors][Index], word[pgsensors][Index+1])
+    if (word[pgsensors][Index] == physicalId) and querysensorsent(Index)        ' have a sensor
       updatesensorsent(Index, physicalId)
-      valuet := sensor_getData(physicalId, applicationIdt := word[@_sensors][Index+1], word[@_sensors][Index+2]) ' have sensor data to send?
-      'serial.fstr6(string("sport Sensor %d %x %x %x %d %d\r"), Index, physicalId, applicationIdt, valuet, word[@_sensors][Index+2], word[@_sensors][Index+3])
+      valuet := sensor_getData(physicalId, applicationIdt := word[pgsensors][Index+1], word[pgsensors][Index+2]) ' have sensor data to send?
+      'serial.fstr6(string("sport Sensor %d %x %x %x %d %d\r"), Index, physicalId, applicationIdt, valuet, word[pgsensors][Index+2], word[pgsensors][Index+3])
       setpintx()                                                                ' switch pin to transmit
       'waitus(100)
       if sendtime(Index)                                                        ' enough time since last time sent sensor?
@@ -432,14 +438,14 @@ pri SendData(prim, applicationIdt, valuet) | byte frame[8], i
   frame[7] := GetChecksum(@frame, 7)
 
   ' Send the frame
-  repeat i from 0 to (8-1)
+  repeat 8 with i
     SendByte(frame[i], i==0)
 
   'serial.fstr0(string("\r"))
 
 pri GetChecksum(pdata, len) : total | i
 ' calculate CRC
-  repeat i from 0 to (len - 1)
+  repeat len with i
     total += byte[pdata][i]
     total += (total >> 8)
     total &= $ff
@@ -478,7 +484,6 @@ con
 
 dat
 ' maximum of 25 sensors
-_sensorCountEntries  long      (@_sensorsend - @_sensors)/2                     ' count of info, not count of sensors
 _sensorCount  long      (@_sensorsend - @_sensors)/(2*_sensornoentries)         ' count of info, not count of sensors
 '                       physical id            sensor id     subindex  delay(ms)
 _sensors

@@ -176,7 +176,7 @@ PRI motoroff()
 
 PRI write(pbytes, nobytes) | index
 ' write nobytes to lidar
-  repeat index from 0 to nobytes-1                                              ' repeat for each byte in buffer
+  repeat nobytes with index                                                     ' repeat for each byte in buffer
     wypin(txpin, byte[pbytes][index])                                           ' send byte
     repeat                                                                      ' wait until flushed
     while pinr(txpin) == 0
@@ -202,7 +202,7 @@ PRI _sendCommand(cmd, ppayload, payloadsize) : ok | byte checksum, byte sizebyte
     checksum ^= cmd
     checksum ^= (payloadsize & $FF)
 
-    repeat pos from 0 to payloadsize-1                                          ' calc checksum
+    repeat payloadsize with pos                                                 ' calc checksum
       checksum ^= BYTE[ppayload][pos]
 
     sizebyte := payloadsize                                                     ' send size
