@@ -32,64 +32,76 @@ DAT
 ' The first are weights for the hidden nodes:  (InputNodes+1)  * HiddenNodes
 ' The second are weights for the output nodes: (HiddenNodes+1) * OutputNodes
 '
-{
 ' from spin2 trainer: nn_train.spin2
+'{
 fHiddenWeights
- long 7.072293e-01
- long 1.146613e-01
- long 2.863246e+00
- long -2.487716e-02
- long -6.357699e-01
- long 3.908694e-01
- long -1.908637e-01
- long 9.856998e-02
- long -5.147691e-02
- long 3.703414e+00
- long 3.763179e-01
- long 2.729059e+00
- long -1.485012e+00
- long -2.462658e+00
- long -6.096124e-01
- long -8.521959e+00
- long 1.312684e+00
- long 1.453432e-01
- long 2.788676e-02
- long 5.950765e-02
- long -3.249168e-01
- long 2.976849e+00
- long -3.033682e-01
- long 2.549369e+00
- long 1.246289e+00
- long 2.162237e-01
- long 2.378869e+00
- long -5.248801e-01
- long -5.029560e-01
- long 8.127416e-01
- long 2.893655e-01
- long -1.134241e+00
- long -3.198640e+00
- long 1.050889e+00
- long -2.811598e-01
- long -4.828155e+00
- fEndHiddenWeights
- fOutputWeights
- long -2.308291e+00
- long -1.637372e+00
- long -2.867199e-01
- long 1.076637e+00
- long -4.864613e+00
- long -1.090867e+00
- long 5.831216e+00
- long 4.292695e+00
- long 1.442060e+00
- long 2.020371e+00
- long -1.597189e+00
- long -5.768107e+00
- long 3.180980e-02
- long -2.769673e-01
- fEndOutputWeights
-'}
+long 1.074378e-01
+long -2.618973e+00
+long -8.017249e-01
+long -1.605691e+00
+long -5.438482e-01
+long 9.610894e-01
 
+long -8.995779e-01
+long -1.199365e+00
+long -2.046993e+00
+long 1.571164e+00
+long -2.932147e-01
+long 3.554947e-01
+
+long 7.862390e-01
+long -6.490445e-01
+long 9.057328e+00
+long 6.127009e-01
+long 7.133089e-01
+long -1.634628e+00
+
+long -7.902029e-01
+long -1.308742e+00
+long -2.093864e+00
+long 6.883631e-01
+long -5.588447e-01
+long 2.617458e-01
+
+long -3.925641e-01
+long -2.150220e+00
+long -2.860991e-01
+long -2.183831e+00
+long -1.059482e+00
+long 9.454644e-01
+
+long 7.786440e-01
+long 5.583652e+00
+long -1.932532e+00
+long -9.387718e-01
+long 9.730888e-01
+long 6.240403e-01
+fEndHiddenWeights
+
+fOutputWeights
+long 3.028817e-01
+long 2.604457e+00
+
+long 4.724762e+00
+long 4.384694e+00
+
+long -6.097480e+00
+long -5.727854e+00
+
+long 3.511851e+00
+long -1.085837e+00
+
+long 1.460946e+00
+long 2.221208e+00
+
+long -2.188089e+00
+long -2.902344e+00
+
+long -5.984973e-01
+long -6.601086e-01
+fEndOutputWeights
+'}
+{
 ' from PC trainer
 fHiddenWeights
 long -0.771484375
@@ -176,10 +188,10 @@ pub drive_nn(pInput, pOutput) | index, pout
 ' translate between demo_dual_motor_rc input/output
 '   input: 0.0-1.0, lidar detection range (L, FL, F, FR, R)
 '   output: -100 to 100, left/right motor speed
-' 247-341us with log_w_approx_exp_no_overflow16_clamped sigmoid
+' 233-328us with log_w_approx_exp_no_overflow16_clamped sigmoid
   pout := InputToOutput(pInput)                                                 ' input to NN to obtain output
 
-  repeat index from 0 to OutputNodes-1
+  repeat OutputNodes with index
     long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert 0 -> +1 to -100 to 100
 
 pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum, t1
@@ -195,11 +207,11 @@ pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, 
   ' Compute hidden layer activations
   ' float HiddenWeights[InputNodes + 1][HiddenNodes]                            ' weight per input node per hidden node
   tempindex := InputNodes*HiddenNodes                                           ' bias is handled as an extra input node
-  repeat outer from 0 to HiddenNodes-1
+  repeat HiddenNodes with outer
     faccum := long[@fHiddenWeights][tempindex++]                                ' bias to start adding up weights
     tempindex1 := outer
-    repeat inner from 0 to InputNodes-1
-      if (t1 := long[pfTestInput][inner]) <> 0                                  ' skip the 0 (note only checking for bits 0)
+    repeat InputNodes with inner
+      if (t1 := long[pfTestInput][inner]) <> 0                                  ' skip the 0 (only checking for bits 0, let multiply handle rest)
         faccum := faccum +. (t1 *. long[@fHiddenWeights][tempindex1])           ' sum of weights per hidden node per input node
       tempindex1 += HiddenNodes                                                 ' next hidden node
     fHidden[outer] := utilities.sigmoid(faccum)                                 ' total per hidden node, curve flattened using logistic function
@@ -207,10 +219,10 @@ pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, 
   ' Compute output layer activations
   ' float OutputWeights[HiddenNodes + 1][OutputNodes];                          ' weight per hidden node per output node
   tempindex := HiddenNodes*OutputNodes                                          ' bias is handled as an extra hidden node
-  repeat outer from 0 to OutputNodes-1
+  repeat OutputNodes with outer
     faccum := long[@fOutputWeights][tempindex++]                                ' bias
     tempindex1 := outer
-    repeat inner from 0 to HiddenNodes-1
+    repeat HiddenNodes with inner
       faccum := fAccum +. (fHidden[inner] *. long[@fOutputWeights][tempindex1]) ' sum of weights per output node per hidden node
       tempindex1 += OutputNodes
     fOutput[outer] := utilities.sigmoid(faccum)                                 ' total per output node, curve flattened using logistic function
@@ -226,7 +238,7 @@ lidardisp   byte "L#F#R", 0
 PUB updatedisplaylidar(pfin) : result | i
 ' convert lidar detection into displayable string
   strcopy(@disp, @lidardisp, 5)
-  repeat i from 0 to 4
+  repeat 5 with i
     if long[pfin][i] <. 0.5
       disp[i] := " "
   return @disp
@@ -253,7 +265,7 @@ pub test_nn() | pftest, nout[2], i, t, clk
 ' run set of tests on nn
 '
   clk := clkfreq/1_000_000
-  repeat i from 0 to ((@endftestinputs - @ftestinputs)/(4*5))-1
+  repeat ((@endftestinputs - @ftestinputs)/(4*5)) with i
     pftest := @long[@ftestinputs][5*i]
     t := getct()
     drive_nn(pftest, @nout)
