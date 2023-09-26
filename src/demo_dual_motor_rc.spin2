@@ -90,8 +90,8 @@ CON { fixed io pins }
   YAW                           = 2
   PRESSURE                      = 3
 
-  TESTTRAINING                  = false                 ' run tests on the trained model
-  TRAINING                      = true                  ' use training data to generate model weights
+  TESTTRAINING                  = true                          ' run tests on the trained model
+  TRAINING                      = true                         ' use training data to generate model weights
 
 OBJ { our Drive Subsystem }
 
