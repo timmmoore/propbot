@@ -1,4 +1,5 @@
-{ Neural Network
+{
+Neural Network
   port of
         http://robotics.hobbizine.com/arduinoann.html
 
@@ -14,13 +15,13 @@ HiddenNodes     = 6
 OutputNodes     = 2
 
 OBJ
-    utilities   : "utilities"
+  utilities   : "utilities"
 
 DAT
 fLearningRate            long 0.3
 fMomentum                long 0.9
 fInitialWeightMax        long 0.5
-fSuccess                 long 0.0015
+fSuccess                 long 0.0001
 
 fInput {[PatternCount][InputNodes]}
   long 0.0, 0.0, 0.0, 0.0, 0.0
@@ -39,185 +40,140 @@ fTarget {[PatternCount][OutputNodes]}
   long 0.5, 0.6
 
 VAR
-  long fError
-  long prog_start
+  long fError                                                                   ' MSE
 
-  long i, j
-  long fAccum
-  long p, q
-  long ReportEvery100
-  long TrainingCycle
-  long fRando
+  long start
+  'long i, j                                                                     ' loop indexes
+  long fAccum                                                                   ' general sum
+  long p, q                                                                     ' training data indexes
+  long TrainingCycle                                                            ' number of times round the training cycle
 
-  long RandomizedIndex[PatternCount]
+  long RandomizedIndex[PatternCount]                                            ' random order of training data
 
-  long fHiddenDelta[HiddenNodes]
+  long fHiddenDelta[HiddenNodes]                                                ' gradient for hidden weights
 
-  long fOutputDelta[OutputNodes]
+  long fOutputDelta[OutputNodes]                                                ' gradient for output weights
 
-  long fHiddenWeights[(InputNodes + 1)*HiddenNodes]
-  long fChangeHiddenWeights[(InputNodes + 1)*HiddenNodes]
+  long fHiddenWeights[(InputNodes + 1)*HiddenNodes]                             ' current hidden weights
+  long fChangeHiddenWeights[(InputNodes + 1)*HiddenNodes]                       ' change to hidden weights, calculated using gradient
 
-  long fChangeOutputWeights[(HiddenNodes + 1)*OutputNodes]
-  long fOutputWeights[(HiddenNodes + 1)*OutputNodes]
+  long fOutputWeights[(HiddenNodes + 1)*OutputNodes]                            ' current output weights
+  long fChangeOutputWeights[(HiddenNodes + 1)*OutputNodes]                      ' change to output weights, calculated using gradient
 
-  long fOutput[OutputNodes]
-  long fHidden[HiddenNodes]
+  long fOutput[OutputNodes]                                                     ' current output node values
+  long fHidden[HiddenNodes]                                                     ' current hidden node values
 
 pub null()
 
-pub start()
-  fError := 2.0
+pri rand(r) : result
+  case r
+    16:                                                                         ' optimize for a couple of cases
+      result := getrnd() & $0f
+    128:
+      result := getrnd() & $7f
+    other:                                                                      ' and handle the rest
+      result := getrnd() +// r
 
-  ReportEvery100 := 1
-  repeat p from 0 to PatternCount-1
+pub train_nn() | tindex, t1index, diff, i, j
+' trains the network
+  debug("Start training ", sdec(HiddenNodes), " ", sdec(InputNodes))
+
+  debug(`SCOPE_XY MyXY SIZE 160 COLOR black black RANGE 80_000 SAMPLES 0 'MSE') ' plot MSE for each training cycle
+
+  repeat p from 0 to PatternCount-1                                             ' training data index
     RandomizedIndex[p] := p
 
-pri rand(r) : result
-  if r == 16
-    result := getrnd() & $0f
-  elseif r == 128
-    result := getrnd() & $7f
-  else
-    result := getrnd() +// r
-
-pub train_nn() | t, t1
-'TRAINS THE NEURAL NETWORK
-  debug("Start training")
-
-  debug(`SCOPE_XY MyXY SIZE 120 COLOR black black RANGE 10_000 SAMPLES 0 'MSE')
-  prog_start := 0
-  debug("training init ", sdec(HiddenNodes), " ", sdec(InputNodes))
-
-  ' Initialize HiddenWeights and ChangeHiddenWeights
-  'float ChangeHiddenWeights[InputNodes + 1][HiddenNodes];
-  'long fChangeHiddenWeights[(InputNodes + 1)*HiddenNodes]
-  'float HiddenWeights[InputNodes + 1][HiddenNodes];
-  'long fHiddenWeights[(InputNodes + 1)*HiddenNodes]
-  repeat i from 0 to HiddenNodes-1
+  repeat i from 0 to HiddenNodes-1                                              ' Initialize HiddenWeights and ChangeHiddenWeights
+    tindex := 0
     repeat j from 0 to InputNodes
-      t := HiddenNodes*j
-      fChangeHiddenWeights[t+i] := 0.0
-      fRando := float(rand(128)) /. 128.0
-      fHiddenWeights[t+i] := 2.0 *. (fRando -. 0.5) *. long[@fInitialWeightMax]
-      'debug("rand pattern ", sdec(i), " ", sdec(j), " ", sdec(t), " ", fdec(fChangeHiddenWeights[t+i]), " ", fdec(fHiddenWeights[t+i]))
+      fChangeHiddenWeights[tindex+i] := 0.0
+      fHiddenWeights[tindex+i] := float(rand(128)-64) /. 64.0 *. long[@fInitialWeightMax]
+      tindex += HiddenNodes
 
-  ' Initialize OutputWeights and ChangeOutputWeights
-  ' float ChangeOutputWeights[HiddenNodes + 1][OutputNodes];
-  ' float OutputWeights[HiddenNodes + 1][OutputNodes];
-  debug("training init1 ", sdec(OutputNodes), " ", sdec(HiddenNodes))
-  repeat i from 0 to OutputNodes-1
+  repeat i from 0 to OutputNodes-1                                              ' Initialize OutputWeights and ChangeOutputWeights
+    tindex := 0
     repeat j from 0 to HiddenNodes
-      t := OutputNodes*j
-      fChangeOutputWeights[t+i] := 0.0
-      fRando := float(rand(128)) /. 128.0
-      fOutputWeights[t+i] := 2.0 *. (fRando -. 0.5) *. long[@fInitialWeightMax]
-      'debug("rand pattern1 ", sdec(i), " ", sdec(j), " ", sdec(t), " ", fdec(fChangeOutputWeights[t+i]), " ", fdec(fOutputWeights[t+i]))
+      fChangeOutputWeights[tindex+i] := 0.0
+      fOutputWeights[tindex+i] := float(rand(128)-64) /. 64.0 *. long[@fInitialWeightMax]
+      tindex += OutputNodes
 
-  ' Begin training
-  repeat TrainingCycle from 1 to 2147483647-1
-    'debug("training cycle")
+  start := getms()
+  repeat TrainingCycle from 1 to 2147483647-1                                   ' Begin training
 
-    'debug("training cycle1 ", sdec(PatternCount))
-    ' Randomize order of training patterns
-    repeat p from 0 to PatternCount-1
+    repeat p from 0 to PatternCount-1                                           ' Randomize order of training data
       q := rand(PatternCount)
       RandomizedIndex[p], RandomizedIndex[q] := RandomizedIndex[q], RandomizedIndex[p]
+
     fError := 0.0
-    'debug("training cycle1a ", sdec(p), " ", sdec(q), " ", sdec(r))
-
-    'debug("training cycle2 ", sdec(PatternCount), " ", fdec(Error))
-
-    ' Cycle through each training pattern in the randomized order
-    repeat q from 0 to PatternCount-1
+    repeat q from 0 to PatternCount-1                                           ' Cycle through each training pattern in the randomized order
       p := RandomizedIndex[q]
 
-      'debug("training cycle3 ", sdec(HiddenNodes), " ", fdec(Error))
-      ' Compute hidden layer activations
-      'float HiddenWeights[InputNodes + 1][HiddenNodes];
-      t := InputNodes*HiddenNodes
+      tindex := InputNodes*HiddenNodes                                          ' Compute hidden layer activations
       repeat i from 0 to HiddenNodes-1
-        fAccum := fHiddenWeights[t+i]
+        fAccum := fHiddenWeights[tindex+i]
+        t1index := 0
         repeat j from 0 to InputNodes-1
-          fAccum := fAccum +. long[@fInput][(InputNodes*p)+j] *. fHiddenWeights[(HiddenNodes*j)+i]
+          fAccum := fAccum +. long[@fInput][(InputNodes*p)+j] *. fHiddenWeights[t1index+i]
+          t1index += HiddenNodes
         fHidden[i] := utilities.sigmoid(fAccum)
-      'debug("training cycle4 ", sdec(OutputNodes), " ", fdec(Error))
 
-      ' Compute output layer activations and calculate errors
-      'float OutputWeights[HiddenNodes + 1][OutputNodes];
-      t := HiddenNodes*OutputNodes
+      tindex := HiddenNodes*OutputNodes                                         ' Compute output layer activations and calculate errors
       repeat i from 0 to OutputNodes-1
-        fAccum := fOutputWeights[t+i]
+        fAccum := fOutputWeights[tindex+i]
         repeat j from 0 to HiddenNodes-1
           fAccum := fAccum +. fHidden[j] *. fOutputWeights[(OutputNodes*j)+i]
         fOutput[i] := utilities.sigmoid(fAccum)
-        t1 := OutputNodes*p
-        ' gradient
-        fOutputDelta[i] := (long[@fTarget][t1+i] -. fOutput[i]) *. fOutput[i] *. (1.0 -. fOutput[i])
-        ' MSE
-        fError := fError +. 0.5 *. (long[@fTarget][t1+i] -. fOutput[i]) *. (long[@fTarget][t1+i] -. fOutput[i])
+        t1index := OutputNodes*p
+        fOutputDelta[i] := (long[@fTarget][t1index+i] -. fOutput[i]) *. fOutput[i] *. (1.0 -. fOutput[i]) ' gradient
+        diff := long[@fTarget][t1index+i] -. fOutput[i]
+        fError := fError +. 0.5 *. diff *. diff                                 ' sum of MSE for these time through training data
 
-      'debug("training cycle5 ", sdec(HiddenNodes), " ", fdec(Error))
-      ' Backpropagate errors to hidden layer
-      'float OutputWeights[HiddenNodes + 1][OutputNodes];
-      repeat i from 0 to HiddenNodes-1
+      repeat i from 0 to HiddenNodes-1                                          ' Backpropagate errors to hidden layer
         fAccum := 0.0
         repeat j from 0 to OutputNodes-1
           fAccum := fAccum +. fOutputWeights[(OutputNodes*i)+j] *. fOutputDelta[j]
-        ' gradient
-        fHiddenDelta[i] := fAccum *. fHidden[i] *. (1.0 -. fHidden[i])
+        fHiddenDelta[i] := fAccum *. fHidden[i] *. (1.0 -. fHidden[i])          ' gradient
 
-      'debug("training cycle6 ", sdec(HiddenNodes), " ", fdec(Error))
-      ' Update Inner-->Hidden Weights
-      'float ChangeHiddenWeights[InputNodes + 1][HiddenNodes];
-      'float HiddenWeights[InputNodes + 1][HiddenNodes];
-      t := InputNodes*HiddenNodes
+      tindex := InputNodes*HiddenNodes                                          ' Update Inner-->Hidden Weights
       repeat i from 0 to HiddenNodes-1
         ' update to hidden bias
-        fChangeHiddenWeights[t+i] := long[@fLearningRate] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[t+i]
-        fHiddenWeights[t+i] := fHiddenWeights[t+i] +. fChangeHiddenWeights[t+i]
+        fChangeHiddenWeights[tindex+i] := long[@fLearningRate] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[tindex+i]
+        fHiddenWeights[tindex+i] := fHiddenWeights[tindex+i] +. fChangeHiddenWeights[tindex+i]
         repeat j from 0 to InputNodes-1
-          t1 := HiddenNodes*j
+          t1index := HiddenNodes*j
           ' update to hidden weights
-          fChangeHiddenWeights[t1+i] := long[@fLearningRate] *. long[@fInput][(InputNodes*p)+j] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[t1+i]
-          fHiddenWeights[t1+i] := fHiddenWeights[t1+i] +. fChangeHiddenWeights[t1+i]
+          fChangeHiddenWeights[t1index+i] := long[@fLearningRate] *. long[@fInput][(InputNodes*p)+j] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[t1index+i]
+          fHiddenWeights[t1index+i] := fHiddenWeights[t1index+i] +. fChangeHiddenWeights[t1index+i]
 
-      'debug("training cycle7 ", sdec(OutputNodes), " ", fdec(Error))
-      ' Update Hidden-->Output Weights
-      'float ChangeOutputWeights[HiddenNodes + 1][OutputNodes];
-      'float OutputWeights[HiddenNodes + 1][OutputNodes];
-      t := HiddenNodes*OutputNodes
+      tindex := HiddenNodes*OutputNodes                                         ' Update Hidden-->Output Weights
       repeat i from 0 to OutputNodes-1
-        fChangeOutputWeights[t+i] := long[@fLearningRate] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[t+i]
+        fChangeOutputWeights[tindex+i] := long[@fLearningRate] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[tindex+i]
         ' update to output bias
-        fOutputWeights[t+i] := fOutputWeights[t+i] +. fChangeOutputWeights[t+i]
+        fOutputWeights[tindex+i] := fOutputWeights[tindex+i] +. fChangeOutputWeights[tindex+i]
         repeat j from 0 to HiddenNodes-1
-          t1 := OutputNodes*j
-          fChangeOutputWeights[t1+i] := long[@fLearningRate] *. fHidden[j] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[t1+i]
+          t1index := OutputNodes*j
+          fChangeOutputWeights[t1index+i] := long[@fLearningRate] *. fHidden[j] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[t1index+i]
           ' update to output weights
-          fOutputWeights[t1+i] := fOutputWeights[t1+i] +. fChangeOutputWeights[t1+i]
+          fOutputWeights[t1index+i] := fOutputWeights[t1index+i] +. fChangeOutputWeights[t1index+i]
 
-    ' Every 100 cycles send data to terminal for display
-    ReportEvery100 := ReportEvery100 - 1
-    if ReportEvery100 == 0
+    debug(`MyXY `((TrainingCycle*50-80_000),round(fError*.160_000.0)-80_000))
 
-      'debug("TrainingCycle: ", sdec(TrainingCycle), " Error: ", sdec(Error))
-      debug(`MyXY `(TrainingCycle/100-10_000,round(fError*.10_000.0)))
-
-      ReportEvery100 := (TrainingCycle == 1)? 99 : 100
-
-    ' If error rate is less than pre-determined threshold then end
-    if fError < long[@fSuccess]
+    if fError < long[@fSuccess]                                                 ' If error rate is less than pre-determined threshold then end
       quit
 
-  debug("Stop training ", udec(TrainingCycle), " ", fdec(fError))
+  start := getms() - start
+  debug("Stop training ", udec(TrainingCycle), " total:", udec_(start), "ms, time:", udec_(start/TrainingCycle), "ms, ", fdec(fError))
+
+  ' print out the weights to paste into nn_drive.spin2
   debug("fHiddenWeights")
   repeat i from 0 to ((InputNodes + 1)*HiddenNodes)-1
+    debug(if((i+//HiddenNodes==0) and (i<>0)), " ")
     debug("long ", fdec_(fHiddenWeights[i]))
   debug("fEndHiddenWeights")
-
+  debug(" ")
   debug("fOutputWeights")
   repeat i from 0 to ((HiddenNodes + 1)*OutputNodes)-1
+    debug(if((i+//OutputNodes==0) and (i<>0)), " ")
     debug("long ", fdec_(fOutputWeights[i]))
   debug("fEndOutputWeights")
 '
