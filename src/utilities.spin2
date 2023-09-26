@@ -58,39 +58,6 @@ PUB swapbytes(val) : result
     mov     result, val
     movbyts result, #%%0123
   end
-'
-{
-CON
-  FLT           = $a2
-  FGT           = $a4
-  FNE           = $a6
-  FEQ           = $a8
-  FLTE          = $aa
-  FGTE          = $ac
-
-PUB frel(w, x, paa): r | y, _FFFFFFFF
-' floating point comparision, without spin interpreter bug
-  _FFFFFFFF~~
-  org
-                bitl    w,#31           wcz     'make left-side comparable
-                cmp     w,##$7F800001   wc      'NaN?
-        if_nc   skip    #%1111
-        if_z    neg     w                       '+/- %0_xxxxxxxx_mmmmmmmmmmmmmmmmmmmmmmm
-
-                bitl    x,#31           wcz     'make right-side comparable
-                cmp     x,##$7F800001   wc      'NaN?
-        if_nc   skip    #%111111                'if either NaN, return false
-        if_z    neg     x                       '+/- %0_xxxxxxxx_mmmmmmmmmmmmmmmmmmmmmmm
-
-                cmps    w,x             wcz     'do comparison
-        if_z    mov     y,#%1000                'equal?
-        if_nz   mov     y,#%0100                'above?
-        if_c    mov     y,#%0010                'below?
-                test    y,paa           wc      'test mask
-
-                muxc    r,_FFFFFFFF             'return boolean
-  end
-}
 
 con
   ' debug switches are 3 position switchs: 500, 1250 and 2000
@@ -132,21 +99,20 @@ pub cart_pol(x, y) : r, t
     getqx     t
   end
 '
-{
 CON
-  fposlimit        = 7.0
-  fneglimit        = -7.0
+  fposlimitfull    = 7.0                                ' 16.619047165
+  fneglimitfull    = -7.0
 
 ' equilivalent
 '   return 1.0/(1.0 + exp(-x))
 '
-pub sigmoid(fin) : result | fsum, fterm, fterm1, fterm2, fterm3, fterm4, fterm5, fterm6, fterm7, fterm8
+pub sigmoid_full(fin) : result | fsum, fterm, fterm1, fterm2, fterm3, fterm4, fterm5, fterm6, fterm7, fterm8
 ' output range 0 to +1
   fin := -.fin
                                                         ' make sure in range for the tayor series to converge
-  if fin >. fposlimit                                   ' >. handle upper limit
+  if fin >. fposlimitfull                               ' >. handle upper limit
     result := 1.0
-  elseif fin <. fneglimit                               ' <. handle lower limit
+  elseif fin <. fneglimitfull                           ' <. handle lower limit
     result := 0.0
   else
     fterm  := fin *. (fin /. 2.0)                       ' tayor series for exp
@@ -160,10 +126,9 @@ pub sigmoid(fin) : result | fsum, fterm, fterm1, fterm2, fterm3, fterm4, fterm5,
     fterm8 := fterm7 *. (fin /. 10.0)
     fsum := fin +. fterm +. fterm1 +. fterm2 +. fterm3 +. fterm4 +. fterm5 +. fterm6 +. fterm7 +. fterm8
     result := 1.0 /. (2.0 +. fsum)
-}
 
 CON
-  fposlimit                     = 16.0 '16.619047165
+  fposlimit                     = 16.0
 '
 ' approx log_w_approx_exp_no_overflow16_clamped
 ' see https://scicomp.stackexchange.com/questions/42186/faster-logistic-function
