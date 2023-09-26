@@ -14,7 +14,7 @@ CON
   LIDAR_BITS                    = 8
   LIDAR_BAUD                    = 115200
 
-  STACK_SIZE_LONGS              = 200                                           ' stack for lidar cog
+  STACK_SIZE_LONGS              = 100                                           ' stack for lidar cog
 
   CMD_PACKET_SYNCBYTE           = 0
   CMD_PACKET_CMDFLAG            = 1
@@ -111,9 +111,9 @@ VAR
   ' 0 is in front, rotates  clockwise to 359 degrees
   ' front of lidar is opposite end from motor
   ' max distance is 12_000 mm
-  word distance[360]                                                            ' contains distance in mm for angle 0-360
-  word disrotation[360]                                                         ' how many rotations since the measurement was received
-  word rotations                                                                ' count rotations since started
+  word distance[360]                                                            ' contains distance in mm (150-12_000) for angle 0-359
+  byte disrotation[360]                                                         ' how many rotations since the measurement was received
+  byte rotations                                                                ' count rotations since started
 
   long taskStack[STACK_SIZE_LONGS]                                              ' cog stack
 
@@ -140,7 +140,7 @@ PUB stop()
     Cog := 0                                                                    ' force stopped
 
   wordfill(@distance, $ffff, 360)                                               ' long distance
-  longfill(@disrotation, 0, 360)                                                ' reset rotations
+  bytefill(@disrotation, 0, 360)                                                ' reset rotations
   rotations := MAXROTATIONS                                                     ' max rototations more than init distotation
 
   motoroff()                                                                    ' make sure motor stopped
