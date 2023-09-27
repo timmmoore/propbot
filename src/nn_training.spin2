@@ -18,10 +18,10 @@ OBJ
   utilities   : "utilities"
 
 DAT
-fLearningRate            long 0.3
-fMomentum                long 0.9
-fInitialWeightMax        long 0.5
-fSuccess                 long 0.0001
+fLearningRate            long 0.5                                               ' how much to follow the gradient
+fMomentum                long 0.9                                               ' how much to keep the current weights
+fInitialWeightMax        long 0.5                                               ' adjustment ot random for initial weights
+fSuccess                 long 0.0001                                            ' MSE error < this to complete
 
 fInput {[PatternCount][InputNodes]}
   long 0.0, 0.0, 0.0, 0.0, 0.0
