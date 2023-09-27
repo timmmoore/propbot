@@ -38,6 +38,7 @@ CON
   DATA_ID_ACC                   = 5                     '        5 used for Acc X, Y, Z, SP2UART(Host)
   DATA_ID_FLOW                  = 7                     '        7 used for optical flow x and y
   DATA_ID_TEMP                  = 8                     '        8 used for motor driver temperatures
+  DATA_ID_LIDAR                 = 9                     '        9 used for lidar distances
 
   SPORT_MIN_TELEMETRY_DELAY_US = 500
 
@@ -119,6 +120,12 @@ CON
   FSSP_ACTUAL3           = $5102
   FSSP_ACTUAL4           = $5103
 
+  FSSP_LIDARL            = $5104                        ' Lidar distance
+  FSSP_LIDARFL           = $5105
+  FSSP_LIDARF            = $5106
+  FSSP_LIDARFR           = $5107
+  FSSP_LIDARR            = $5108
+
   SENSOR_APPL_ID_GSATS   = $5111                        ' GPS no satellites
   SENSOR_APPL_ID_GHDOP   = $5112                        ' GPS HDOP
 
@@ -152,6 +159,7 @@ VAR
   long flow[2], temps[4]
   long voltage, current1, current2
   long batterycount, battery[MAXCELLS]
+  long lidar[5]
   long StkAddr[STACK_SIZE_LONGS]
 
 OBJ
@@ -194,6 +202,9 @@ pub setactuals(pspeeds, paspeeds, pangles, tmax)
   longmove(@actualaspeeds, paspeeds, 4)
   longmove(@actualangles, pangles, 4)
   maxangle := tmax
+
+pub setlidar(plidar)
+  longmove(@lidar, plidar, 5)
 
 pub setflow(pflows)
   longmove(@flow, pflows, 2)
@@ -340,6 +351,9 @@ pri actuals_getData(applicationIdt, subindex) : valuet
   valuet := actual(actualspeeds[applicationIdt-FSSP_ACTUAL1])
   valuet |= (actual(muldiv64(actualangles[applicationIdt-FSSP_ACTUAL1], 36000, maxangle)) << 16) ' 0-360.00 * 100 in upper word
 
+pri lidar_getData(applicationIdt, subindex) : valuet
+  valuet := lidar[applicationIdt-FSSP_LIDARL]
+
 pri flow_getData(index) : valuet
   valuet := flow[index]
 
@@ -363,6 +377,8 @@ pri sensor_getData(physicalId, applicationIdt, subindex) : valuet
     ' not enabled in validid
     DATA_ID_FLVSS:                                                              ' applicationId == FSSP_DATAID_CELLS
       valuet := flv_getData(applicationIdt, subindex)                           ' voltage per cell, 0.002V
+    DATA_ID_LIDAR:                                                              ' applicationId == FSSP_LIDARL-FSSP_LIDARR               '
+      valuet := lidar_getData(applicationIdt, subindex)
 
 pri querysensorsent(Index) : retv
   return lastsensorindex[Index/_sensornoentries] == 0
@@ -477,7 +493,7 @@ wait   rdpin x, rp              wc                                              
 
 pri validid(physicalId) : sensorid
 ' is it one of our physical sensors?
-  sensorid := lookdown(physicalId: DATA_ID_FAS, DATA_ID_ACC) ', DATA_ID_GPS, DATA_ID_ACTUALS, DATA_ID_FLOW, DATA_ID_TEMP)
+  sensorid := lookdown(physicalId: DATA_ID_FAS, DATA_ID_ACC, DATA_ID_LIDAR) ', DATA_ID_GPS, DATA_ID_ACTUALS, DATA_ID_FLOW, DATA_ID_TEMP)
 
 con
   _sensornoentries              = 4                                             ' number entries for each sensor info
@@ -487,17 +503,17 @@ dat
 _sensorCount  long      (@_sensorsend - @_sensors)/(2*_sensornoentries)         ' count of info, not count of sensors
 '                       physical id            sensor id     subindex  delay(ms)
 _sensors
-'              word      DATA_ID_GPS,     FSSP_DATAID_LATLONG,     0,   1000     ' $0800, lat
-'              word      DATA_ID_GPS,     FSSP_DATAID_LATLONG,     1,   1000     ' $0800, long
-'              word      DATA_ID_GPS,     FSSP_DATAID_SPEED,       0,   1000     ' $0830
-'              word      DATA_ID_GPS,     SENSOR_APPL_ID_GSATS,    0,   1000     ' $5111, no satellites
-'              word      DATA_ID_GPS,     FSSP_DATAID_GPS_ALT,     0,   1000     ' $0820. altitude, cm
-'              word      DATA_ID_FLOW,    FSSP_DATAID_FLOWX,       0,    500     ' $5114, optical flow x
-'              word      DATA_ID_FLOW,    FSSP_DATAID_FLOWY,       0,    500     ' $5115, optical flow y
-'              word      DATA_ID_ACTUALS, FSSP_ACTUAL1,            0,    500     ' $5100, swerve FL, speed/angle (deg *100)
-'              word      DATA_ID_ACTUALS, FSSP_ACTUAL2,            0,    500     ' $5101, swerve FR
-'              word      DATA_ID_ACTUALS, FSSP_ACTUAL3,            0,    500     ' $5102, swerve BL
-'              word      DATA_ID_ACTUALS, FSSP_ACTUAL4,            0,    500     ' $5103, swerve BR
+              word      DATA_ID_GPS,     FSSP_DATAID_LATLONG,     0,   1000     ' $0800, lat
+              word      DATA_ID_GPS,     FSSP_DATAID_LATLONG,     1,   1000     ' $0800, long
+              word      DATA_ID_GPS,     FSSP_DATAID_SPEED,       0,   1000     ' $0830
+              word      DATA_ID_GPS,     SENSOR_APPL_ID_GSATS,    0,   1000     ' $5111, no satellites
+              word      DATA_ID_GPS,     FSSP_DATAID_GPS_ALT,     0,   1000     ' $0820. altitude, cm
+              word      DATA_ID_FLOW,    FSSP_DATAID_FLOWX,       0,    500     ' $5114, optical flow x
+              word      DATA_ID_FLOW,    FSSP_DATAID_FLOWY,       0,    500     ' $5115, optical flow y
+              word      DATA_ID_ACTUALS, FSSP_ACTUAL1,            0,    500     ' $5100, swerve FL, speed/angle (deg *100)
+              word      DATA_ID_ACTUALS, FSSP_ACTUAL2,            0,    500     ' $5101, swerve FR
+              word      DATA_ID_ACTUALS, FSSP_ACTUAL3,            0,    500     ' $5102, swerve BL
+              word      DATA_ID_ACTUALS, FSSP_ACTUAL4,            0,    500     ' $5103, swerve BR
               word      DATA_ID_ACC,     FSSP_DATAID_HEADING,     0,   1000     ' $0840, in deg *100
               word      DATA_ID_ACC,     FSSP_DATAID_PITCH,       0,   1000     ' $5230, given in deg *10
               word      DATA_ID_ACC,     FSSP_DATAID_ROLL,        0,   1000     ' $5240, given in deg *10
@@ -505,12 +521,12 @@ _sensors
               word      DATA_ID_FAS,     FSSP_DATAID_VFAS,        0,   1000     ' $0210, given in 0.01V *100
               word      DATA_ID_FAS,     FSSP_DATAID_CURRENT1,    0,   1000     ' $0201, in 0.1mA
               word      DATA_ID_FAS,     FSSP_DATAID_CURRENT2,    0,   1000     ' $0202, in 0.1mA
-'              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID1,        0,   1000     ' $5116, motor driver temps, 0,01C *100
-'              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID2,        0,   1000     ' $5117, motor driver temps, 0,01C *100
-'              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID3,        0,   1000     ' $5118, motor driver temps, 0,01C *100
-'              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID4,        0,   1000     ' $5119, motor driver temps, 0,01C *100
-'              word      DATA_ID_FLVSS,   FSSP_DATAID_CELLS,       0,   1000     ' $0300, battery cell 0, 1
-'              word      DATA_ID_FLVSS,   FSSP_DATAID_CELLS,       1,   1000     ' $0300, battery cell 2
+              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID1,        0,   1000     ' $5116, motor driver temps, 0,01C *100
+              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID2,        0,   1000     ' $5117, motor driver temps, 0,01C *100
+              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID3,        0,   1000     ' $5118, motor driver temps, 0,01C *100
+              word      DATA_ID_TEMP,    DATA_ID_TEMP_ID4,        0,   1000     ' $5119, motor driver temps, 0,01C *100
+              word      DATA_ID_FLVSS,   FSSP_DATAID_CELLS,       0,   1000     ' $0300, battery cell 0, 1
+              word      DATA_ID_FLVSS,   FSSP_DATAID_CELLS,       1,   1000     ' $0300, battery cell 2
 _sensorsend
 '
 con { license }
