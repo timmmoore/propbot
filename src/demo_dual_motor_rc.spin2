@@ -90,7 +90,7 @@ CON { fixed io pins }
   YAW                           = 2
   PRESSURE                      = 3
 
-  TESTTRAINING                  = true                          ' run tests on the trained model
+  TESTTRAINING                  = false 'true                          ' run tests on the trained model
   TRAINING                      = true                         ' use training data to generate model weights
 
 OBJ { our Drive Subsystem }
@@ -163,7 +163,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
             waitms(1000)
 
         remoteCog := remoteCtl.starttx(SBUS_RX, @Defaults, @ctlMinValue, @ctlMaxValue, @validswitches, @valid3Ways, remoteCtl.MAX_CTLS)
-        telemetryCog := telemetry.start(SPORT_BI)
+        telemetryCog := telemetry.startEx(SPORT_BI, @_sensors, _sensorCount)
         lidarCog := lidar.start(LIDARTX, LIDARRX, LIDARCTL)
         statusOK := remoteCog <> 0 ? TRUE : FALSE
         status1Ok := telemetryCog <> 0 ? TRUE : FALSE
@@ -299,6 +299,7 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
         rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_VRA)
         accrate := map(accrate, rngMin, rngMax, 10, 200)
 
+        updatelidar()
         updatetelemetry()
 
         if bLastShowDriveStates <> bShowDriveStates
@@ -395,7 +396,7 @@ PRI doOneRotation() | ltdegree, rtdegree
     ltdegree, rtdegree := wheels.getRotationCount(wheels.DRU_DEGREES)           ' get current wheel rotation
     debug("  Onrotation Check:", sdec(ltdegree), " ", sdec(rtdegree))
 
-PRI updatetelemetry()
+PRI updatetelemetry() | index, tlidar[NOLIDAR]
 ' update telemetry
     if usfsavailable == 0
         _, qt[0], qt[1], qt[2], qt[3] := imu.getMin()                           ' get yaw direction from imu
@@ -405,9 +406,20 @@ PRI updatetelemetry()
     telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER))  ' battery voltage telemetry
     nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
     telemetry.setcurrent(nLtmAmps, nRtmAmps)                                    ' current
+    repeat NOLIDAR with index                                                         ' convert to mm for telemetry
+      tlidar[index] := round((1.0 -. flidarmeas[index]) *. float(MAXDISTANCE-MINDISTANCE)) + MINDISTANCE
+    telemetry.setlidar(@tlidar)
+
+PRI updatelidar()
+  flidarmeas[0] := lidar.checkdistance(LEFT2ANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' left
+  flidarmeas[1] := lidar.checkdistance(LEFT1ANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' left front
+  flidarmeas[2] := lidar.checkdistance(FRONTANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' front
+  flidarmeas[3] := lidar.checkdistance(RIGHT1ANGLE, DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' right front
+  flidarmeas[4] := lidar.checkdistance(RIGHT2ANGLE, DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' right
 
 CON
   ' LIDAR measurements
+  NOLIDAR       = 5
   FRONTANGLE    = 0                                                             ' angle to front
   LEFT1ANGLE    = 45                                                            ' angle to left
   LEFT2ANGLE    = 90                                                            ' angle to left
@@ -419,11 +431,12 @@ CON
   NNSPEEDRATIO  = 2                                                             ' ratio to slowdown bot
 
 VAR
-  long flidarmeas[5]
+  long flidarmeas[NOLIDAR]
 
 PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent, speeddiv, rngMin, rngMax, pdisp
 
   ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
+  updatelidar()
   updatetelemetry()
   debug("  AutoRoam Starting: Yaw:", fdec_(osensor[YAW]), " ltticks:", sdec_(ltcurrent), " rtticks:", sdec_(rtcurrent))
 
@@ -431,13 +444,9 @@ PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent, speeddiv, rngMin, rng
     speeddiv := remoteCtl.readchannel(remoteCtl.CTL_VRB)
     rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_VRB)
     speeddiv := map(speeddiv, rngMin, rngMax, 10, 1)                                                    ' want to go faster if VRB is larger
-    flidarmeas[0] := lidar.checkdistance(LEFT2ANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' left
-    flidarmeas[1] := lidar.checkdistance(LEFT1ANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' left front
-    flidarmeas[2] := lidar.checkdistance(FRONTANGLE,  DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' front
-    flidarmeas[3] := lidar.checkdistance(RIGHT1ANGLE, DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' right front
-    flidarmeas[4] := lidar.checkdistance(RIGHT2ANGLE, DELTAANGLE, MINDISTANCE, MAXDISTANCE)             ' right
     pdisp := nn.updatedisplaylidar(@flidarmeas)
     'debug("  AutoRoam1: (", zstr_(pdisp), ") ", fdec_(flidarmeas[0]), " ", fdec_(flidarmeas[1]), " ", fdec_(flidarmeas[2]), " ", fdec_(flidarmeas[3]), " ", fdec_(flidarmeas[4]))
+    updatelidar()
     updatetelemetry()
 
     ltcurrent, rtcurrent := wheels.getDistance(wheels.DDU_MM)
@@ -513,6 +522,24 @@ DAT
   ' yaw offset for usfsmax to front bot in 0-360.0 degrees
   yawoffset     long    1.0
 
+' maximum of 25 sensors
+_sensorCount  long      (@_sensorsend - @_sensors)/(2*telemetry._sensornoentries) ' count of info, not count of sensors
+'                       physical id            sensor id     subindex  delay(ms)
+_sensors
+              word  telemetry.DATA_ID_ACC, telemetry.FSSP_DATAID_HEADING,     0,   1000     ' $0840, in deg *100
+              word  telemetry.DATA_ID_ACC, telemetry.FSSP_DATAID_PITCH,       0,   1000     ' $5230, given in deg *10
+              word  telemetry.DATA_ID_ACC, telemetry.FSSP_DATAID_ROLL,        0,   1000     ' $5240, given in deg *10
+              word  telemetry.DATA_ID_ACC, telemetry.SENSOR_APPL_ID_PRESSURE, 0,   1000     ' $5113, hPa *100
+              word  telemetry.DATA_ID_FAS, telemetry.FSSP_DATAID_VFAS,        0,   1000     ' $0210, given in 0.01V *100
+              word  telemetry.DATA_ID_FAS, telemetry.FSSP_DATAID_CURRENT1,    0,   1000     ' $0201, in 0.1mA
+              word  telemetry.DATA_ID_FAS, telemetry.FSSP_DATAID_CURRENT2,    0,   1000     ' $0202, in 0.1mA
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARL,           0,    500     ' $5104, lidar L
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARFL,          0,    500     ' $5105, lidar FL
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARF,           0,    500     ' $5106, lidar F
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARFR,          0,    500     ' $5107, lidar FR
+              word  telemetry.DATA_ID_LIDAR, telemetry.FSSP_LIDARR,           0,    500     ' $5108, lidar R
+_sensorsend
+'
 CON { license }
 {{
 
