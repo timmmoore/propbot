@@ -126,6 +126,40 @@ pub sigmoid_full(fin) : result | fsum, fterm, fterm1, fterm2, fterm3, fterm4, ft
     fsum := fin +. fterm +. fterm1 +. fterm2 +. fterm3 +. fterm4 +. fterm5 +. fterm6 +. fterm7 +. fterm8
     result := 1.0 /. (2.0 +. fsum)
 
+pub sigmoidtest() | t2, t1, to2[6], to1[6]
+        t2 := getct()
+        to2[0] := x16a(1.0)
+        to2[1] := x16a(0.1)
+        to2[2] := x16a(-1.0)
+        to2[3] := x16a(15.5)
+        to2[4] := x16a(-15.5)
+        to2[5] := x16a(-216.0)
+        t2 := getct() - t2
+        t1 := getct()
+        to1[0] := x16(1.0)
+        to1[1] := x16(0.1)
+        to1[2] := x16(-1.0)
+        to1[3] := x16(15.5)
+        to1[4] := x16(-15.5)
+        to1[5] := x16(-216.0)
+        t1 := getct() - t1
+        debug("x16a ", fdec(to2[0]))
+        debug("x16a ", fdec(to2[1]))
+        debug("x16a ", fdec(to2[2]))
+        debug("x16a ", fdec(to2[3]))
+        debug("x16a ", fdec(to2[4]))
+        debug("x16a ", fdec(to2[5]))
+        debug("x16a time: ", udec_(t2/(270*6)), ".", udec_((t2/(27*6))//10), "us/call")
+        debug("x16 ", fdec(to1[0]))
+        debug("x16 ", fdec(to1[1]))
+        debug("x16 ", fdec(to1[2]))
+        debug("x16 ", fdec(to1[3]))
+        debug("x16 ", fdec(to1[4]))
+        debug("x16 ", fdec(to1[5]))
+        debug("x16 time: ", udec_(t1/(270*6)), ".", udec_((t1/(27*6))//10), "us/call")
+        repeat
+          waitms(1000)
+
 CON
   fposlimit                     = 16.0
 '
@@ -150,7 +184,7 @@ pub sigmoidDer(fin) : result
   result := fin *. (1.0 -. fin)
 
 pub x16a(fin) : result
-' 13.1us
+' 13.2us
     fin := 1.0 -. fin /. 16.0                           ' 1-fin/16
     fin := fin *. fin                                   ' ^2
     fin := fin *. fin                                   ' ^4
@@ -158,7 +192,7 @@ pub x16a(fin) : result
     result := 1.0 /. (1.0 +. (fin *. fin))              ' 1.0 /. (1.0 + fin^16)
 
 pub x16(fx) : result | ma, sa, na, xa, y, mb, mc, md, me, xb, xc, xd, xe, c
-' 6.6us
+' 6.5us
 ' result := 1.0 /. (1.0 +. (1.0 -. x /. 16.0)^16)
 '
   ma := fx                                              ' packed float

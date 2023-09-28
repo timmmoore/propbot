@@ -90,8 +90,8 @@ CON { fixed io pins }
   YAW                           = 2
   PRESSURE                      = 3
 
-  TESTTRAINING                  = false 'true                          ' run tests on the trained model
-  TRAINING                      = true                         ' use training data to generate model weights
+  TESTTRAINING                  = true                  ' run tests on the trained model
+  TRAINING                      = true                  ' use training data to generate model weights
 
 OBJ { our Drive Subsystem }
 
@@ -105,6 +105,7 @@ OBJ { our Drive Subsystem }
     imu         : "usfsmax"                             ' imu
     nn          : "nn_drive"                            ' neural network auto drive
     nntraining  : "nn_training"                         ' training for above neutral network
+    utilities   : "utilities"
 
 VAR
     long    remoteCog, telemetryCog, lidarCog
@@ -147,6 +148,8 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
         battery.start(BATTERY_ANALOG, BATTERY_LOW, BATTERY_HIGH)
         usfsavailable := imu.startx(USFSMAX_SCL, USFSMAX_SDA, USFSMAX_RESET, @Config, yawoffset)
         debug(if(usfsavailable), "IMU start error: ", uhex(usfsavailable))
+
+        'utilities.sigmoidtest()
 
         if TRAINING
           nntraining.train_nn()
