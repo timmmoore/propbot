@@ -73,7 +73,7 @@ pri rand(r) : result
     other:                                                                      ' and handle the rest
       result := getrnd() +// r
 
-pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index
+pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index, t5index
 ' trains the network
   debug("Start training ", sdec(HiddenNodes), " ", sdec(InputNodes))
 
@@ -99,7 +99,7 @@ pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index
   start := getms()
   t3index := InputNodes*HiddenNodes                                             ' Compute hidden layer activations
   t4index := HiddenNodes*OutputNodes                                            ' Compute output layer activations and calculate errors
-  repeat TrainingCycle from 1 to POSX-1                                         ' Begin training, approx. 6ms per loop
+  repeat TrainingCycle from 1 to POSX-1                                         ' Begin training, approx. 5ms per loop
 
     repeat PatternCount with p                                                  ' Randomize order of training data
       q := rand(PatternCount)
@@ -109,26 +109,26 @@ pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index
     repeat PatternCount with q                                                  ' Cycle through each training pattern in the randomized order
       p := RandomizedIndex[q]
 
-      tindex := InputNodes*p                                                    ' precompute array offsets where possible
-      t2index := OutputNodes*p
+      tindex := InputNodes*p                                                    ' precompute array offset into training data
+      t2index := OutputNodes*p                                                  ' precompute array offset into output data
       repeat HiddenNodes with i
-        fAccum := fHiddenWeights[t3index+i]
+        fAccum := fHiddenWeights[t3index+i]                                     ' hidden bias
         t1index := i
         repeat InputNodes with j
           fAccum := fAccum +. long[@fInput][tindex+j] *. fHiddenWeights[t1index]
           t1index += HiddenNodes
-        fHidden[i] := utilities.sigmoid(fAccum)
+        fHidden[i] := utilities.sigmoid(fAccum)                                 ' hidden node values
 
       repeat OutputNodes with i
-        fAccum := fOutputWeights[t4index+i]
+        fAccum := fOutputWeights[t4index+i]                                     ' output bias
         t1index := i
         repeat HiddenNodes with j
           fAccum := fAccum +. fHidden[j] *. fOutputWeights[t1index]
           t1index += OutputNodes
-        fOutput[i] := utilities.sigmoid(fAccum)
-        diff := long[@fTarget][t2index+i] -. fOutput[i]
+        fOutput[i] := utilities.sigmoid(fAccum)                                 ' output node values
+        diff := long[@fTarget][t2index+i] -. fOutput[i]                         ' difference between target and output values
         fOutputDelta[i] := diff *. utilities.sigmoidDer(fOutput[i])             ' gradient/derivative for sigmoid
-        fError := fError +. 0.5 *. diff *. diff                                 ' sum of MSE for this time through training data
+        fError := fError +. 0.5 *. diff *. diff                                 ' accum MSE for this time through training data
 
       t1index := 0
       repeat HiddenNodes with i                                                 ' Backpropagate errors to hidden layer
@@ -138,25 +138,23 @@ pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index
         fHiddenDelta[i] := fAccum *. utilities.sigmoidDer(fHidden[i])           ' gradient/derivative for sigmoid
         t1index += OutputNodes
 
-      repeat HiddenNodes with i
-        ' update to hidden bias
         fChangeHiddenWeights[t3index+i] := long[@fLearningRate] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[t3index+i]
         fHiddenWeights[t3index+i] := fHiddenWeights[t3index+i] +. fChangeHiddenWeights[t3index+i]
-        t1index := i
+        t5index := i
         repeat InputNodes with j
-          ' update to hidden weights
-          fChangeHiddenWeights[t1index] := long[@fLearningRate] *. long[@fInput][tindex+j] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[t1index]
-          fHiddenWeights[t1index] := fHiddenWeights[t1index] +. fChangeHiddenWeights[t1index]
-          t1index += HiddenNodes
+                                                                                ' update to hidden weights
+          fChangeHiddenWeights[t5index] := long[@fLearningRate] *. long[@fInput][tindex+j] *. fHiddenDelta[i] +. long[@fMomentum] *. fChangeHiddenWeights[t5index]
+          fHiddenWeights[t5index] := fHiddenWeights[t5index] +. fChangeHiddenWeights[t5index]
+          t5index += HiddenNodes
 
       repeat OutputNodes with i
+                                                                                ' update to output bias
         fChangeOutputWeights[t4index+i] := long[@fLearningRate] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[t4index+i]
-        ' update to output bias
         fOutputWeights[t4index+i] := fOutputWeights[t4index+i] +. fChangeOutputWeights[t4index+i]
         t1index := i
         repeat HiddenNodes with j
+                                                                                ' update to output weights
           fChangeOutputWeights[t1index] := long[@fLearningRate] *. fHidden[j] *. fOutputDelta[i] +. long[@fMomentum] *. fChangeOutputWeights[t1index]
-          ' update to output weights
           fOutputWeights[t1index] := fOutputWeights[t1index] +. fChangeOutputWeights[t1index]
           t1index += OutputNodes
 
@@ -166,7 +164,7 @@ pub train_nn() | tindex, t1index, t2index, diff, i, j, t3index, t4index
       quit
 
   start := getms() - start
-  debug("Stop training ", udec(TrainingCycle), " total:", udec_(start), "ms, time:", udec_(start/TrainingCycle), "ms, ", fdec(fError))
+  debug("Stop training ", udec(TrainingCycle), " total:", udec_(start), "ms, time:", udec_(start/TrainingCycle), ".", udec_(((start*10)/TrainingCycle)//10), "ms, ", fdec(fError))
 
   ' print out the weights to paste into nn_drive.spin2
   debug("fHiddenWeights")
