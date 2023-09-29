@@ -226,12 +226,18 @@ lidardisp   byte "L#F#R", 0
 
 PUB updatedisplaylidar(pfin) : result | i
 ' convert lidar detection into displayable string
+'   value 0.0 -> " "
+'   value > 0.0 and < 0.5 -> "."
+'   value >= 0.5 -> "LFR#"
+'
   strcopy(@disp, @lidardisp, 5)
   repeat 5 with i
-    if long[pfin][i] <. 0.5
+    if long[pfin][i] ==. 0.0
       disp[i] := " "
+    elseif long[pfin][i] <. 0.5
+      disp[i] := "."
   return @disp
-
+'
 ' set of tests that run the Lidar simultated inputs through the neutral network and prints the results
 '
 DAT
