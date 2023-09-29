@@ -60,11 +60,6 @@ CON { fixed io pins }
   SPORT_BI = 54  { I/O }                                        ' RC receiver SPORT telemetry
 
   BATTERY_ANALOG                = 48 {I}                        ' battery via resistor divider, 20K + 3K
-  BATTERY_LOW                   = 0
-  BATTERY_HIGH                  = 31427                         ' 19K93 + 3K003 resistor divider, max voltage is 24V * 3003/22933 -> 3.1427
-  BATTERY_DIVIDER               = 1232.0                        ' value that makes reading match meter, battery max is 4.2V per cell (total 22.2V)
-  BATTERY_MINIMUM               = 16.0                          ' minimum voltage, battery min is 3.2V per cell (total 16.0V)
-  BATTERY_STOP                  = true                          ' shutdown if min battery reached
 
   DEADBAND                      = 1                             ' ignore speeds slower than this
   MOTOROFFONIGNOREJOYSTICK      = true                          ' disable motor if joystick ignore switch is set
@@ -90,8 +85,8 @@ CON { fixed io pins }
   YAW                           = 2
   PRESSURE                      = 3
 
-  TESTTRAINING                  = true                  ' run tests on the trained model
-  TRAINING                      = true                  ' use training data to generate model weights
+  TESTTRAINING                  = false 'true                  ' run tests on the trained model
+  TRAINING                      = false 'true                  ' use training data to generate model weights
 
 OBJ { our Drive Subsystem }
 
@@ -99,6 +94,7 @@ OBJ { our Drive Subsystem }
     user        : "isp_bldc_motor_userconfig"           ' driver configuration
     wheels      : "isp_steering_2wheel"                 ' the dual-drive BLDC motors, 1 cog per motor, 1 sense cog -> 3 cogs
     remoteCtl   : "isp_flysky_rx"                       ' the FlySky Transmitter, 1 cog
+    bconfig     : "batteryconfig"                       ' battery configuration
     battery     : "jm_ez_analog"                        ' A2D to read battery voltage
     telemetry   : "frskysport"                          ' bidirectional serial port to RC receiver for telemetry, 1 cog
     lidar       : "rplidar"                             ' rplidar A1M8, 1 cog
@@ -145,7 +141,7 @@ PUB main() | statusOK, status1OK, status2OK, basePinLt, basePinRt, voltage, moto
 
         debug("* Set up - remote control")
 
-        battery.start(BATTERY_ANALOG, BATTERY_LOW, BATTERY_HIGH)
+        battery.start(BATTERY_ANALOG, BCONFIG.BATTERY_LOW, BCONFIG.BATTERY_HIGH)
         usfsavailable := imu.startx(USFSMAX_SCL, USFSMAX_SDA, USFSMAX_RESET, @Config, yawoffset)
         debug(if(usfsavailable), "IMU start error: ", uhex(usfsavailable))
 
@@ -372,9 +368,9 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
                 doAutoRoam()
                 nDoingAutoRoam := false
 
-        if fvoltage <. BATTERY_MINIMUM                                         ' <. doesn't work, not all floating point comparisons work
+        if fvoltage <. BCONFIG.BATTERY_MINIMUM                                  '
             debug("--> Minimum Battery Voltage ", fdec(fvoltage))
-            bMinBattery := BATTERY_STOP                                         ' trigger emergency stop and quit the loop
+            bMinBattery := BCONFIG.BATTERY_STOP                                 ' trigger emergency stop and quit the loop
         'debug("--> Battery Voltage ", fdec(fvoltage), fdec(BATTERY_MINIMUM))
 
         if bDoneTesting
@@ -406,7 +402,7 @@ PRI updatetelemetry() | index, tlidar[NOLIDAR]
         osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE] := imu.computeIMUFixed(qt[0], qt[1], qt[2], qt[3])
         telemetry.setimu(osensor[YAW], osensor[PITCH], osensor[ROLL], osensor[PRESSURE]) ' imu telemetry
         'debug("usfs ", fdec(osensor[YAW]), " ", fdec(osensor[PITCH]), " ", fdec(osensor[ROLL]), " ", fdec(osensor[PRESSURE]))
-    telemetry.setvoltage(fvoltage := (float(battery.read())/.BATTERY_DIVIDER))  ' battery voltage telemetry
+    telemetry.setvoltage(fvoltage := (float(battery.read())/.BCONFIG.BATTERY_DIVIDER)) ' battery voltage telemetry
     nLtmAmps, nLtmWatts, nRtmAmps, nRtmWatts := wheels.getCurrent()
     telemetry.setcurrent(nLtmAmps, nRtmAmps)                                    ' current
     repeat NOLIDAR with index                                                         ' convert to mm for telemetry
@@ -458,7 +454,7 @@ PRI doAutoRoam() | ltmotor, rtmotor, ltcurrent, rtcurrent, speeddiv, rngMin, rng
     ltmotor /= speeddiv                                                         ' reduce motor speeds by VRB speed divider
     rtmotor /= speeddiv
     wheels.driveAtPower(ltmotor, rtmotor)
-    waitms(250)                                                                 ' let bot move
+    waitms(100)                                                                 ' let bot move
   while remoteCtl.swIsOn(remoteCtl.CH_12) == false                              ' done?
 
   wheels.driveDirection(0, 0)                                                   ' stop bot before leaving autoroam
