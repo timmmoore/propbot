@@ -188,44 +188,33 @@ pub drive_nn(pInput, pOutput) | index, pout
 ' translate between demo_dual_motor_rc input/output
 '   input: 0.0-1.0, lidar detection range (L, FL, F, FR, R)
 '   output: -100 to 100, left/right motor speed
-' 191-286us with log_w_approx_exp_no_overflow16_clamped sigmoid
+' 137-168us with log_w_approx_exp_no_overflow16_clamped sigmoid
   pout := InputToOutput(pInput)                                                 ' input to NN to obtain output
 
   repeat OutputNodes with index
     long[pOutput][index] := round(long[pout][index] *. 200.0) - 100             ' convert 0 -> +1 to -100 to 100
 
-pri InputToOutput(pfTestInput) : poutput | tempindex, tempindex1, outer, inner, faccum, t1
+pri InputToOutput(pfTestInput) : poutput | tempindex, outer
 ' core of the neutral network
-' input nodes are  5: 0.0-1.0 assumption is true if something left/front-left, front, front-right, right
+' input nodes are  5: 0.0-1.0 higher number is closer: left/front-left, front, front-right, right
 ' output nodes are 2: 0.0-1.0 left/right motor 0 is full speed backwards, 0.5 is stopped, 1.0 is full speed forwards
 ' hidden nodes are 6
 '
 ' cordic operations (1 multiply)*(inputnodes + outputnodes)*hiddennodes
 '                   (hiddennodes+outputnode) * sigmoid(4 multiply, 2 divide)
-' total approx = (42+32) 74 multiply, 16 divide, ~60us, so 18-25% of excution time
+' total approx = (42+32) 74 multiply, 16 divide, ~60us, so 36-44% of excution time
 '
   ' Compute hidden layer activations
   ' float HiddenWeights[InputNodes + 1][HiddenNodes]                            ' weight per input node per hidden node
   tempindex := InputNodes*HiddenNodes                                           ' bias is handled as an extra input node
   repeat HiddenNodes with outer
-    faccum := long[@fHiddenWeights][tempindex++]                                ' bias to start adding up weights
-    tempindex1 := outer
-    repeat InputNodes with inner
-      if (t1 := long[pfTestInput][inner]) <> 0                                  ' skip the 0 (only checking for bits 0, let multiply handle rest)
-        faccum := faccum +. (t1 *. long[@fHiddenWeights][tempindex1])           ' sum of weights per hidden node per input node
-      tempindex1 += HiddenNodes                                                 ' next hidden node
-    fHidden[outer] := utilities.sigmoid(faccum)                                 ' total per hidden node, curve flattened using logistic function
+    fHidden[outer] := utilities.sigmoid(utilities.SumMultiply(long[@fHiddenWeights][tempindex++], outer, pfTestInput, @fHiddenWeights, InputNodes, HiddenNodes))                                 ' total per hidden node, curve flattened using logistic function
 
   ' Compute output layer activations
   ' float OutputWeights[HiddenNodes + 1][OutputNodes];                          ' weight per hidden node per output node
   tempindex := HiddenNodes*OutputNodes                                          ' bias is handled as an extra hidden node
   repeat OutputNodes with outer
-    faccum := long[@fOutputWeights][tempindex++]                                ' bias
-    tempindex1 := outer
-    repeat HiddenNodes with inner
-      faccum := fAccum +. (fHidden[inner] *. long[@fOutputWeights][tempindex1]) ' sum of weights per output node per hidden node
-      tempindex1 += OutputNodes
-    fOutput[outer] := utilities.sigmoid(faccum)                                 ' total per output node, curve flattened using logistic function
+    fOutput[outer] := utilities.sigmoid(utilities.SumMultiply(long[@fOutputWeights][tempindex++], outer, @fHidden, @fOutputWeights, HiddenNodes, OutputNodes))                                 ' total per output node, curve flattened using logistic function
 
   return @fOutput
 '
@@ -272,30 +261,26 @@ pub test_nn() | pftest, nout[2], i, t, clk
     t := getct() - t
     debug("test", udec_(i+1), " ", udec_(t/clk), "us lidar=(", zstr_(updatedisplaylidar(pftest)), ") motors= ", sdec_long_array_(@nout, 2))
 '
-CON { license }
+con { license }
 {{
 
- -------------------------------------------------------------------------------------------------
-  MIT License
+  Terms of Use: MIT License
 
-  Copyright (c) 2023 Iron Sheep Productions, LLC
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this
+  software and associated documentation files (the "Software"), to deal in the Software
+  without restriction, including without limitation the rights to use, copy, modify,
+  merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to the following
+  conditions:
 
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
+  The above copyright notice and this permission notice shall be included in all copies
+  or substantial portions of the Software.
 
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+  PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+  HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+  OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  SOFTWARE.
- =================================================================================================
 }}
