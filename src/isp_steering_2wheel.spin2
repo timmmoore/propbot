@@ -172,6 +172,8 @@ PUB resetTracking()
 ''  Effectively: use current position as home from now on
     ltWheel.resetWindowAccumulators()
     rtWheel.resetWindowAccumulators()
+    ltWheel.resetTracking()
+    rtWheel.resetTracking()
 
 CON { --- Subsystem Control --- }
 
@@ -234,7 +236,7 @@ PUB stopAfterRotation(nRotationCount, eRotationUnits, toStop) | degreesPerTic, t
     if toStop
         prestop := motorStopHallTicks
         ticksToStopLt := ltWheel.getTicksToStop()
-        ticksToStopRt := ltWheel.getTicksToStop()
+        ticksToStopRt := rtWheel.getTicksToStop()
         motorStopHallTicks -= (ticksToStopLt > ticksToStopRt)?ticksToStopLt:ticksToStopRt
 
     debug(" stopAfterRotation: ", udec(nRotationCount), " ", udec(degreesPerTic), " ", udec(ticsPerRotation), " ", sdec(motorStopHallTicks), " ", udec(prestop), " ", sdec(ticksToStopLt), " ", sdec(ticksToStopRt))
@@ -283,7 +285,7 @@ PUB stopAfterDistance(nDistance, eDistanceUnits, toStop) | fValue, ticksToStopLt
     ' if toStop is true then account for time for motor to stop
     if toStop
         ticksToStopLt := ltWheel.getTicksToStop()
-        ticksToStopRt := ltWheel.getTicksToStop()
+        ticksToStopRt := rtWheel.getTicksToStop()
         motorStopHallTicks -= (ticksToStopLt > ticksToStopRt)?ticksToStopLt:ticksToStopRt
 
 '' Stops both motors, after either of the motors reaches {distance} specified in {distanceUnits} [DDU_IN or DDU_MM].
@@ -317,7 +319,7 @@ PUB stopAfterTime(nTime, eTimeUnits, toStop) | timeNow, timeStoplT, timeStopRt
 
     if toStop
         timeStopLt := ltWheel.getMsToStop()
-        timeStopRt := ltWheel.getMsToStop()
+        timeStopRt := rtWheel.getMsToStop()
         motorStopMSecs -= (timeStopLt > timeStopRt)?timeStopLt:timeStopRt
 
     ' if toStop is true then account for time for motor to stop
@@ -651,7 +653,7 @@ PRI taskPostionSense() | senseStartTicks, eStopState
         deltaTicks := getct() - senseStartTicks
 
         ' code uses about 1_880 ticks. This is little over 9 uS  @200MHz clock
-        '   wait remainder of 50 mSec before next sample
+        '   wait remainder of 10 mSec before next sample
         waitct(senseStartTicks + ticks10ms)                                     ' wait to create "sense" time-base
 
 PRI isEmergency() : bEmergencyState
