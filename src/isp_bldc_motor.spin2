@@ -67,7 +67,7 @@ DAT { misc time constants }
     ticks1ms    LONG    0
     ticks1us    LONG    0
     ticks500us  long    0                       ' 2 kHz
-    ticks50ms   long    0                       ' 20 Hz
+    ticks10ms   long    0                       ' 100 Hz
 
 PUB null()
 
@@ -123,7 +123,7 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     ticks1ms   := (CLKFREQ / 1_000)
     ticks1us   := (CLKFREQ / 1_000_000)
     ticks500us := (ticks1ms * 500) / 1_000  ' phrased this way for better result
-    ticks50ms  := ticks1ms * 50
+    ticks10ms  := ticks1ms * 10
 
     ' set up debug variables
     useDebug := FALSE
@@ -325,7 +325,7 @@ PUB holdAtStop(bEnable)
 PUB resetTracking()
 '' Resets the position tracking values returned by getDistance() and getRotations()
     posTrkHallTicks := 0        ' reset all of our trackers (they are incremented in sensor loop)
-    waitms(75)                  ' values will clear in 50ms
+    waitms(15)                  ' values will clear in 10ms
 
 PUB moveShaftToAngle(desiredAngle)
 '' TESTING USE: force motor to specific angle
@@ -769,7 +769,7 @@ PUB testResetFault() | bDidFault
 PUB testResetMaxValues()
 '' TESTING USE: reset our fault indicator that we tripped during test
     bResetSenseData := TRUE
-    waitms(75)                                          ' values should clear in 50ms
+    waitms(15)                                          ' values should clear in 10ms
 
 
 CON ' --- PRIVATE (Utility) Methods ---
@@ -1120,8 +1120,8 @@ PUB getDebugData() : nGroups, pGroupTitles, pGroupNames, pGroupVarCts, pGroupVar
 CON ' -- TASK: position tracking --
 
 ' Sense Constants
-    ' at 50 ms
-    SENSE_LOOP_HZ = 20
+    ' at 10 ms
+    SENSE_LOOP_HZ = 100
     ' at 31.25 ms
     'SENSE_LOOP_HZ = 32
     ' at 15.625 ms
@@ -1314,7 +1314,7 @@ PRI taskPostionSense() | senseStartTicks, eStopState
 
         ' code uses about 1_880 ticks. This is little over 9 uS  @200MHz clock
         '   wait remainder of 50 mSec before next sample
-        waitct(senseStartTicks + ticks50ms)                                     ' wait to create "sense" time-base
+        waitct(senseStartTicks + ticks10ms)                                     ' wait to create "sense" time-base
 
 PUB getposTrkHallTicks() : retv
 '' INTERNAL USE: return our position tracking hall-ticks
@@ -1326,19 +1326,21 @@ PUB getMsToStop() : retv
   retv SIGNX= 30
   retv := abs(retv / (ramp_down*2))                                             ' number times to ramp_down, ramp every 500us
 
-PUB getTicksToStop() : retv | tinc, tms
+PUB getTicksToStop() : retv | tinc, stepsToStop, anglePerStep, ticksToStop
 '' INTERNAL USE: return hall-ticks to stop from current speed
   tinc := targetIncre & $7fff_ffff                                              ' current target speed, remove sync flag
-  retv := tinc := abs(tinc SIGNX 30)                                            ' add sign back before absolute
-  retv /= 2                                                                     ' average speed
-  retv := ((retv >> 8) * 2000) >> 15                                            ' angle per sec
-  retv /= 1000
+  tinc := abs(tinc SIGNX 30)                                                    ' add sign back before absolute
+  stepsToStop := tinc / 50_000                                                  ' steps (500us) to stop
+  anglePerStep := ((tinc >> 8) * 1000) >>  17                                   ' average angle per step * 1000
+  ticksToStop := (anglePerStep * stepsToStop)/1000                              ' angle * stepstostop * tics per rotation/1000
+  ticksToStop := (ticksToStop * hallTicsPerRotation)/2000                       ' angle * stepstostop * tics per rotation/1000
   if user.MOTOR_TYPE == MOTR_DOCO_4KRPM
-    retv := 3*retv
-    retv := retv <# 13                                                          ' more than this doesn't impact stopping
+    ticksToStop *= 2
+    ticksToStop <#= 13
   else
-    retv := (74*retv)/10
-  debug("getTicksToStop ",  sdec(tinc), " ", sdec(tms), " ", sdec(retv))
+    ticksToStop <#= 60
+  retv := ticksToStop
+  debug("getTicksToStop ",  sdec(tinc), " ", sdec(retv), " ", sdec(anglePerStep), " ", sdec(stepsToStop))
 
 PRI resetHdmiData()
     tvMaxFps_x10 := tvMaxMPH_x10 := tvMaxkPH_x10 := 0
