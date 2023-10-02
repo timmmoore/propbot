@@ -44,7 +44,7 @@ CON { timing }
 
 CON {debug}
   DEBUG_LOG_SIZE = 500_000
-  DEBUG_COGS     = %1111_0001                                   ' disable debug for motor cogs
+  'DEBUG_COGS     = %1111_0001                                   ' disable debug for motor cogs
 
 CON { fixed io pins }
 
@@ -386,12 +386,12 @@ PUB remoteControlMotor() | bIgnoreJoySticks, bDoneTesting, bShowState, loopCt, b
 PRI doOneRotation() | ltdegree, rtdegree
 
     ltdegree, rtdegree := wheels.getRotationCount(wheels.DRU_DEGREES)           ' get current wheel rotation
-    wheels.driveDirection(10, 0)                                                ' drive forward slowly
+    wheels.driveDirection(20, 0)                                                ' drive forward slowly
     debug("  Onrotation Driving:", sdec(ltdegree), " ", sdec(rtdegree))
-    wheels.stopAfterRotation(ltdegree+360, wheels.DRU_DEGREES)                  ' stop after 360degree wheel rotation
+    wheels.stopAfterRotation(ltdegree+360, wheels.DRU_DEGREES, true)            ' stop after 360degree wheel rotation
     ltdegree, rtdegree := wheels.getRotationCount(wheels.DRU_DEGREES)           ' get current wheel rotation
     debug("  Onrotation Stopped:", sdec(ltdegree), " ", sdec(rtdegree))
-    waitms(1000)
+    waitms(4000)
     ltdegree, rtdegree := wheels.getRotationCount(wheels.DRU_DEGREES)           ' get current wheel rotation
     debug("  Onrotation Check:", sdec(ltdegree), " ", sdec(rtdegree))
 
