@@ -204,8 +204,9 @@ PUB driveAtPower(leftPower, rightPower)
     ltWheel.SyncStatus()                                ' make sure both motors have taken value
     rtWheel.SyncStatus()
 
-PUB stopAfterRotation(nRotationCount, eRotationUnits, toStop) | degreesPerTic, ticsPerRotation, ticksToStopLt, ticksToStopRt, prestop
-'' Stops both motors, after either of the motors reaches {rotationCount} of {rotationUnits} [DRU_HALL_TICKS, DRU_DEGREES, or DRU_ROTATIONS].
+PUB stopAfterRotation(nRotationCount, eRotationUnits, toStop) | degreesPerTic, ticsPerRotation, ticksToStopLt, ticksToStopRt, prestop, maxtickToStop, limitlt
+'' Stops both motors, after either of the motors reaches {rotationCount} of {rotationUnits} [DRU_HALL_TICKS, DRU_DEGREES, or DRU_ROTATIONS]
+'' if toStop is true, attempts to estimate rotations to stop motors and allows for it.
 '' USE WITH: driveDirection(), drive()
 '' USE WITH:  driveAtPower()
 '' Will ABORT if {rotationCount} < 1
@@ -235,16 +236,25 @@ PUB stopAfterRotation(nRotationCount, eRotationUnits, toStop) | degreesPerTic, t
     ' otherwise stop motor when rotation reached and motor will slow from there
     if toStop
         prestop := motorStopHallTicks
-        ticksToStopLt := ltWheel.getTicksToStop()
-        ticksToStopRt := rtWheel.getTicksToStop()
-        motorStopHallTicks -= (ticksToStopLt > ticksToStopRt)?ticksToStopLt:ticksToStopRt
+        ticksToStopLt, limitlt := ltWheel.getTicksToStop()
+        ticksToStopRt, _ := rtWheel.getTicksToStop()
+
+        maxtickToStop := (ticksToStopLt > ticksToStopRt)?ticksToStopLt:ticksToStopRt
+        debug("sar ", sdec(maxtickToStop), " ", sdec(ticsPerRotation), " ", sdec(motorStopHallTicks))
+        if maxtickToStop > (motorStopHallTicks - limitlt)
+            debug("sar1")
+            motorStopHallTicks -= limitlt
+        else
+            debug("sar2")
+            motorStopHallTicks -= maxtickToStop
 
     debug(" stopAfterRotation: ", udec(nRotationCount), " ", udec(degreesPerTic), " ", udec(ticsPerRotation), " ", sdec(motorStopHallTicks), " ", udec(prestop), " ", sdec(ticksToStopLt), " ", sdec(ticksToStopRt))
 
 '' Stops both motors, after either of the motors reaches {distance} specified in {distanceUnits} [DDU_IN or DDU_MM].
 '' USE WITH: driveDirection(), drive()
-PUB stopAfterDistance(nDistance, eDistanceUnits, toStop) | fValue, ticksToStopLt, ticksToStopRt
+PUB stopAfterDistance(nDistance, eDistanceUnits, toStop) | fValue, ticksToStopLt, ticksToStopRt, maxtickToStop, limitlt
 '' Stops the motors after one of them reaches {distance} specified in {distanceUnits} [DDU_MM, DDU_CM, DDU_IN, DDU_FT, DDU_M].
+'' if toStop is true, attempts to estimate distance to stop motors and allows for it.
 '' USE WITH:  driveAtPower()
 '' Will ABORT if {distance} < 1
     if nDistance < 1
@@ -284,14 +294,20 @@ PUB stopAfterDistance(nDistance, eDistanceUnits, toStop) | fValue, ticksToStopLt
 
     ' if toStop is true then account for time for motor to stop
     if toStop
-        ticksToStopLt := ltWheel.getTicksToStop()
-        ticksToStopRt := rtWheel.getTicksToStop()
-        motorStopHallTicks -= (ticksToStopLt > ticksToStopRt)?ticksToStopLt:ticksToStopRt
+        ticksToStopLt, limitlt := ltWheel.getTicksToStop()
+        ticksToStopRt, _ := rtWheel.getTicksToStop()
+
+        maxtickToStop := (ticksToStopLt > ticksToStopRt)?ticksToStopLt:ticksToStopRt
+        if maxtickToStop > (motorStopHallTicks - limitlt)
+            motorStopHallTicks -= limitlt
+        else
+            motorStopHallTicks -= maxtickToStop
 
 '' Stops both motors, after either of the motors reaches {distance} specified in {distanceUnits} [DDU_IN or DDU_MM].
 '' USE WITH: driveDirection(), drive()
 PUB stopAfterTime(nTime, eTimeUnits, toStop) | timeNow, timeStoplT, timeStopRt
 '' Stops the motors after {time} specified in {timeUnits} [DTU_MILLISEC or DTU_SEC] has elapsed.
+'' if toStop is true, attempts to estimate time to stop motors and allows for it.
 '' USE WITH:  driveAtPower()
 '' Will ABORT if {time} < 1
     if nTime < 1
@@ -317,12 +333,12 @@ PUB stopAfterTime(nTime, eTimeUnits, toStop) | timeNow, timeStoplT, timeStopRt
         if motorStopMSecs == 0
           motorStopMSecs := 1
 
+    ' if toStop is true then account for time for motor to stop
     if toStop
         timeStopLt := ltWheel.getMsToStop()
         timeStopRt := rtWheel.getMsToStop()
         motorStopMSecs -= (timeStopLt > timeStopRt)?timeStopLt:timeStopRt
 
-    ' if toStop is true then account for time for motor to stop
     if motorStopMSecs > 0
         debug("* stop motor at ", udec_long(motorStopMSecs), ", now: ", udec_long(timeNow), ", stop: ", udec_long(timeStopLt), " ", udec_long(timeStopRt))
 
@@ -634,7 +650,7 @@ PRI taskPostionSense() | senseStartTicks, eStopState
             stopMotors()
             motorStopMSecs := 0                         ' and clear user request
         elseif motorStopHallTicks <> 0
-            'debug(" taskPostionSense: ", sdec(motorStopHallTicks), " ", udec(ltWheel.getposTrkHallTicks()), " ", udec(rtWheel.getposTrkHallTicks()))
+            debug(" taskPostionSense: ", sdec(motorStopHallTicks), " ", udec(ltWheel.getposTrkHallTicks()), " ", udec(rtWheel.getposTrkHallTicks()))
             if (ltWheel.getposTrkHallTicks() >= motorStopHallTicks or rtWheel.getposTrkHallTicks() >= motorStopHallTicks)
                 stopMotors()
                 motorStopHallTicks := 0                 ' and clear user request

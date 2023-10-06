@@ -237,6 +237,13 @@ PRI init(eMotorBasePin, eMotorVoltage, eDetectionMode) | fwdDegrees, revDegrees
     elseif eDetectedBoard == REV_B
         rSenseForBoard := F_REV_B_RSENSE
 
+    ' are these tied to the inertia/resistance of the motor/wheel/etc, i.e., do they need to be configurable?
+    if user.MOTOR_TYPE == MOTR_DOCO_4KRPM
+        ticksToStopmultipler := 2
+        ticksToStopmax := 13
+    else
+        ticksToStopmultipler := 1
+        ticksToStopmax := 65
 
 PUB startSenseCog() : ok
 '' Start the single motor sense task (tracks position of motor, distance traveled, etc.)
@@ -274,6 +281,9 @@ VAR { * user request values * }
     LONG    pwm_limit                                   ' max freq of our pwm
 
     BYTE    motorId[MOTOR_ID_STRLEN+1]
+
+    long    ticksToStopmultipler
+    long    ticksToStopmax
 
 PUB testSetMotorId(pIDStr)
 '' TESTING USE: save name used in debug messages
@@ -364,8 +374,9 @@ PUB driveAtPowerEx(power, sync) | limitPwr, motorIncre, correctedPower
     setTargetAccel(motorIncre, sync)
     'debug("-MOT- driveAtPowerEx() EXIT ")
 
-PUB stopAfterRotation(nRotationCount, eRotationUnits, toStop)
+PUB stopAfterRotation(nRotationCount, eRotationUnits, toStop) | limit, ticksToStop
 '' Stops the motor after it reaches {rotationCount} of {rotationUnits} [DRU_HALL_TICKS, DRU_DEGREES, or DRU_ROTATIONS].
+'' if toStop is true, attempts to estimate rotations to stop motors and allows for it.
 '' USE WITH:  driveAtPower()
 '' Will ABORT if {rotationCount} < 1
     if nRotationCount < 1
@@ -391,10 +402,16 @@ PUB stopAfterRotation(nRotationCount, eRotationUnits, toStop)
     'debug("stopafterrotation ", udec_long_(motorStopHallTicks), " ", udec_(getTicksToStop()))
     ' if toStop is true then account for time for motor to stop
     if toStop
-        motorStopHallTicks -= getTicksToStop()
+        ticksToStop, limit := getTicksToStop()
 
-PUB stopAfterDistance(nDistance, eDistanceUnits, toStop)
+        if ticksToStop > (motorStopHallTicks - limit)
+            motorStopHallTicks -= limit
+        else
+            motorStopHallTicks -= ticksToStop
+
+PUB stopAfterDistance(nDistance, eDistanceUnits, toStop) | limit, ticksToStop
 '' Stops the motor after it reaches {distance} specified in {distanceUnits} [DDU_MM, DDU_CM, DDU_IN, DDU_FT, DDU_M].
+'' if toStop is true, attempts to estimate distance to stop motors and allows for it.
 '' USE WITH:  driveAtPower()
 '' Will ABORT if {distance} < 1
     if nDistance < 1
@@ -424,10 +441,16 @@ PUB stopAfterDistance(nDistance, eDistanceUnits, toStop)
 
     ' if toStop is true then account for time for motor to stop
     if toStop
-        motorStopHallTicks -= getTicksToStop()
+        ticksToStop, limit := getTicksToStop()
+
+        if ticksToStop > (motorStopHallTicks - limit)
+            motorStopHallTicks -= limit
+        else
+            motorStopHallTicks -= ticksToStop
 
 PUB stopAfterTime(nTime, eTimeUnits, toStop) | timeNow, timeStop
 '' Stops the motor, after {time} specified in {timeUnits} [DTU_MILLISEC or DTU_SEC] has elapsed.
+'' if toStop is true, attempts to estimate time to stop motors and allows for it.
 '' USE WITH:  driveAtPower()
 '' Will ABORT if {time} < 1
     if nTime < 1
@@ -1326,21 +1349,28 @@ PUB getMsToStop() : retv
   retv SIGNX= 30
   retv := abs(retv / (ramp_down*2))                                             ' number times to ramp_down, ramp every 500us
 
-PUB getTicksToStop() : retv | tinc, stepsToStop, anglePerStep, ticksToStop
+DAT
+ticktostop65
+    long 0, 10, 48, 108, 196, 304, 440, 592, 776, 916, 928
+ticktostop4k
+    long 0, 180, 650, 1400, 1430, 1450, 1450, 1450, 1450, 1450, 1450
+
+PUB getTicksToStop() : retv, limit | maxtinc, index, ticksToStop, tinc, angleToStop
 '' INTERNAL USE: return hall-ticks to stop from current speed
   tinc := targetIncre & $7fff_ffff                                              ' current target speed, remove sync flag
   tinc := abs(tinc SIGNX 30)                                                    ' add sign back before absolute
-  stepsToStop := tinc / 50_000                                                  ' steps (500us) to stop
-  anglePerStep := ((tinc >> 8) * 1000) >>  17                                   ' average angle per step * 1000
-  ticksToStop := (anglePerStep * stepsToStop)/1000                              ' angle * stepstostop * tics per rotation/1000
-  ticksToStop := (ticksToStop * hallTicsPerRotation)/2000                       ' angle * stepstostop * tics per rotation/1000
-  if user.MOTOR_TYPE == MOTR_DOCO_4KRPM
-    ticksToStop *= 2
-    ticksToStop <#= 13
+  maxtinc := abs(maxFwdIncreAtPwr)
+  index := round(((float(tinc) *. 100.0)/. float(maxtinc))/.10.0)
+  index := 0 #> index <# 10
+  if user.MOTOR_TYPE == MOTR_DOCO_4KRPM                                         ' time to stop depends on % of full speed
+    angleToStop := long[@ticktostop4k][index]
+    limit := 13
   else
-    ticksToStop <#= 60
+    angleToStop := long[@ticktostop65][index]                                   ' characterized from motor
+    limit := 56
+  ticksToStop := (angleToStop * hallTicsPerRotation)/360
   retv := ticksToStop
-  debug("getTicksToStop ",  sdec(tinc), " ", sdec(retv), " ", sdec(anglePerStep), " ", sdec(stepsToStop))
+  debug("getTicksToStop ",  sdec(tinc), " ", sdec(retv), " ", sdec(ticksToStop), " ", sdec(angleToStop), " ", sdec(maxtinc), " ", sdec(index))
 
 PRI resetHdmiData()
     tvMaxFps_x10 := tvMaxMPH_x10 := tvMaxkPH_x10 := 0
